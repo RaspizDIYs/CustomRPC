@@ -1,6 +1,8 @@
+using System;
+using System.Linq;
 using System.Text;
 
-namespace CustomMediaRPC;
+namespace CustomMediaRPC.Utils;
 
 public static class StringUtils
 {

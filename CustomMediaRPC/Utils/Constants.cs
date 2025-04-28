@@ -1,4 +1,4 @@
-namespace CustomMediaRPC;
+namespace CustomMediaRPC.Utils;
 
 public static class Constants
 {

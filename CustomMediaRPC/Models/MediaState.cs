@@ -1,7 +1,9 @@
 using System;
 using System.Linq;
+using DiscordRPC;
+using CustomMediaRPC.Utils;
 
-namespace CustomMediaRPC;
+namespace CustomMediaRPC.Models;
 
 public enum MediaPlaybackStatus
 {

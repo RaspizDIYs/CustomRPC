@@ -3,8 +3,10 @@ using System.Threading.Tasks;
 using Windows.Media.Control;
 using DiscordRPC;
 using System.Diagnostics;
+using CustomMediaRPC.Models;
+using CustomMediaRPC.Utils;
 
-namespace CustomMediaRPC;
+namespace CustomMediaRPC.Services;
 
 public class MediaStateManager
 {
@@ -15,6 +17,7 @@ public class MediaStateManager
     private RichPresence? _lastSentPresence;
     private readonly TimeSpan _presenceUpdateThrottle = TimeSpan.FromMilliseconds(1000);
     private DateTime _lastStateChangeTime = DateTime.MinValue;
+    private DateTime? _currentTrackStartTime;
 
     public MediaStateManager(LastFmService lastFmService)
     {
@@ -83,8 +86,21 @@ public class MediaStateManager
             {
                 Debug.WriteLine($"BuildRichPresenceAsync: State changed! Previous: {_currentState}, New: {newState}. Time since last change: {(now - _lastStateChangeTime).TotalMilliseconds}ms");
                 _currentState = newState;
-                _lastSentPresence = null; // Очень важно: Сбрасываем кэш последнего отправленного presence, так как состояние изменилось
+                _lastSentPresence = null;
                 _lastStateChangeTime = now;
+                
+                // --- Управление временем начала трека ---
+                if (_currentState.Status == MediaPlaybackStatus.Playing)
+                {
+                    _currentTrackStartTime = now; // Запоминаем время начала
+                    Debug.WriteLine($"BuildRichPresenceAsync: Track started playing. StartTime set to {_currentTrackStartTime}");
+                }
+                else
+                {
+                    _currentTrackStartTime = null; // Сбрасываем время, если не играет
+                    Debug.WriteLine("BuildRichPresenceAsync: Track is not playing. StartTime reset.");
+                }
+                // ----------------------------------------
             }
             else
             {
@@ -149,6 +165,19 @@ public class MediaStateManager
             string safeState = StringUtils.TruncateStringByBytesUtf8(stateText, Constants.Media.MAX_PRESENCE_TEXT_LENGTH);
             string safeLargeImageText = StringUtils.TruncateStringByBytesUtf8(largeImageText, Constants.Media.MAX_PRESENCE_TEXT_LENGTH);
 
+            // --- Создание Timestamps --- 
+            Timestamps? timestamps = null;
+            if (_currentState.Status == MediaPlaybackStatus.Playing && _currentTrackStartTime.HasValue)
+            {
+                timestamps = new Timestamps { Start = _currentTrackStartTime.Value };
+                Debug.WriteLine($"BuildRichPresenceAsync: Setting timestamp Start={timestamps.Start}");
+            }
+            else
+            {
+                 Debug.WriteLine("BuildRichPresenceAsync: Not setting timestamps (not playing or startTime is null).");
+            }
+            // ---------------------------
+
             var presence = new RichPresence
             {
                 Details = safeDetails,
@@ -157,7 +186,8 @@ public class MediaStateManager
                 {
                     LargeImageKey = largeImageUrl,
                     LargeImageText = safeLargeImageText
-                }
+                },
+                Timestamps = timestamps
             };
 
             Debug.WriteLine($"BuildRichPresenceAsync: Created presence - Details: '{safeDetails}', State: '{safeState}', ImageKey: '{largeImageUrl}', ImageText: '{safeLargeImageText}'");
@@ -209,6 +239,14 @@ public class MediaStateManager
         if (a1 == null && a2 == null) return true;
         if (a1 == null || a2 == null) return false;
         if (a1.LargeImageKey != a2.LargeImageKey || a1.LargeImageText != a2.LargeImageText) return false;
+        
+        // --- Сравнение Timestamps --- 
+        var t1 = p1.Timestamps;
+        var t2 = p2.Timestamps;
+        if (t1 == null && t2 == null) return true; // Оба null - равны
+        if (t1 == null || t2 == null) return false; // Один null, другой нет - не равны
+        if (t1.Start != t2.Start || t1.End != t2.End) return false; // Сравниваем значения Start и End
+        // ----------------------------
 
         return true;
     }

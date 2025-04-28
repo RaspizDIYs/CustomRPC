@@ -6,8 +6,10 @@ using System.Collections.Concurrent;
 using System.Linq;
 using CustomMediaRPC.Utils;
 using System.Diagnostics;
+using Newtonsoft.Json.Linq;
+using CustomMediaRPC.Models;
 
-namespace CustomMediaRPC
+namespace CustomMediaRPC.Services
 {
     public record AlbumArtInfo(string? ImageUrl, string? AlbumTitle);
 

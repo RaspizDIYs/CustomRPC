@@ -7,11 +7,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
-using Microsoft.Extensions.Configuration;
 using System.IO;
 using Wpf.Ui;
 using Wpf.Ui.Appearance;
 using CustomMediaRPC.Utils;
+using CustomMediaRPC.Models;
+using CustomMediaRPC.Services;
 using System.Windows;
 using System.Windows.Controls;
 using DiscordRPC;
@@ -20,15 +21,17 @@ using System.Threading;
 using System.Windows.Threading;
 using System.Windows.Documents;
 using Wpf.Ui.Controls;
+using System.Text; // Добавим для Base64
+using System.ComponentModel; // Добавили для Closing
 
-namespace CustomMediaRPC;
+namespace CustomMediaRPC.Views;
 
 /// <summary>
 /// Interaction logic for MainWindow.xaml
 /// </summary>
 public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 {
-    private readonly AppConfig _config;
+    private AppConfig? _config; // Сделали nullable
     private DiscordRpcClient? _client;
     private MediaStateManager? _mediaStateManager;
     private HttpClient? _sharedHttpClient;
@@ -44,131 +47,91 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private DispatcherTimer? _presenceUpdateDebounceTimer;
     private const int DebounceMilliseconds = 300;
 
-    private readonly string _configFilePath;
     private ApplicationTheme _currentAppTheme;
+
+    // --- Захардкоженные ключи (Base64) ---
+    private const string EncodedClientId = "MTM2NTM5NzU2ODY3NDIwNTc4OA=="; // Base64 of "1365397568674205788"
+    private const string EncodedLastFmApiKey = "NTU4MDdkZjA4MjhmMTdkNGY0YWYwZWJmYzU3Y2I4MTk="; // Base64 of "55807df0828f17d4f4af0ebfc57cb819"
+    // -------------------------------------
 
     public MainWindow()
     {
         InitializeComponent();
-        _configFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
-        _config = LoadConfig();
-        if (string.IsNullOrEmpty(_config.ClientId) || string.IsNullOrEmpty(_config.LastFmApiKey) || _config.LastFmApiKey == "YOUR_LAST_FM_API_KEY_HERE")
+        
+        // --- Инициализация Config с захардкоженными значениями ---
+        string clientId;
+        string lastFmApiKey;
+        try
         {
-             System.Windows.MessageBox.Show("Error: ClientId or LastFmApiKey not found or not set in appsettings.json. Please check the file.", 
+             clientId = Encoding.UTF8.GetString(Convert.FromBase64String(EncodedClientId));
+             lastFmApiKey = Encoding.UTF8.GetString(Convert.FromBase64String(EncodedLastFmApiKey));
+        }
+        catch (FormatException ex)
+        {
+            System.Windows.MessageBox.Show($"Error decoding embedded configuration: {ex.Message}. Please contact the developer.", 
+                                           "Configuration Error", 
+                                           System.Windows.MessageBoxButton.OK, 
+                                           System.Windows.MessageBoxImage.Error);
+             Application.Current.Shutdown();
+             return;
+        }
+
+        // Создаем объект _config, но используем ключи напрямую
+        _config = new AppConfig(); // Можем потом сюда добавить чтение/сохранение других настроек из другого места
+
+        // Проверяем валидность "захардкоженных" ключей (на всякий случай)
+        if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(lastFmApiKey))
+        {
+             System.Windows.MessageBox.Show("Error: Embedded ClientId or LastFmApiKey is missing. Please contact the developer.", 
                                             "Configuration Error", 
                                             System.Windows.MessageBoxButton.OK, 
                                             System.Windows.MessageBoxImage.Error);
              Application.Current.Shutdown();
              return;
         }
+        // -------------------------------------------------------
 
-        // --- Начальная установка темы --- 
-        string? preferredTheme = _config.PreferredTheme;
+
+        // --- Начальная установка темы (можно будет потом тоже вынести в настройки, если нужно) --- 
+        // string? preferredTheme = _config.PreferredTheme; // Пока убрали чтение темы из _config
         ApplicationTheme themeToApply;
 
-        if (!string.IsNullOrEmpty(preferredTheme) && Enum.TryParse(preferredTheme, true, out ApplicationTheme parsedTheme))
-        {
-            themeToApply = parsedTheme;
-            Debug.WriteLine($"Applying preferred theme from config: {themeToApply}");
-        }
-        else
-        {
-            // themeToApply = ApplicationThemeManager.GetSystemTheme(); // Старая строка с ошибкой
-            // Конвертируем SystemTheme в ApplicationTheme
+        // if (!string.IsNullOrEmpty(preferredTheme) && Enum.TryParse(preferredTheme, true, out ApplicationTheme parsedTheme))
+        // {
+        //     themeToApply = parsedTheme;
+        //     Debug.WriteLine($"Applying preferred theme from config: {themeToApply}");
+        // }
+        // else
+        // {
             SystemTheme systemTheme = ApplicationThemeManager.GetSystemTheme();
             themeToApply = systemTheme switch
             {
                 SystemTheme.Light => ApplicationTheme.Light,
                 SystemTheme.Dark => ApplicationTheme.Dark,
-                _ => ApplicationTheme.Dark // По умолчанию темная, если система не определила
+                _ => ApplicationTheme.Dark 
             };
             Debug.WriteLine($"Applying system theme: {themeToApply} (Detected: {systemTheme})");
-        }
+        // }
 
         ApplicationThemeManager.Apply(themeToApply);
         _currentAppTheme = themeToApply;
-
-        // Устанавливаем начальную иконку кнопки
         ThemeCycleButton.Icon = (_currentAppTheme == ApplicationTheme.Dark) 
             ? new SymbolIcon(SymbolRegular.WeatherMoon24) 
             : new SymbolIcon(SymbolRegular.WeatherSunny24);
-        // -------------------------------
+        // -------------------------------\
 
-        // Инициализируем HttpClient и сервисы
+
+        // --- Инициализируем HttpClient и сервисы, используя раскодированные ключи ---
         _sharedHttpClient = new HttpClient();
-        _lastFmService = new LastFmService(_sharedHttpClient, _config.LastFmApiKey ?? string.Empty);
+        _lastFmService = new LastFmService(_sharedHttpClient, lastFmApiKey); // Используем переменную
         _mediaStateManager = new MediaStateManager(_lastFmService);
+        // --------------------------------------------------------------------------
 
         Dispatcher.InvokeAsync(InitializeMediaIntegration);
         InitializeDebounceTimer();
         this.Closed += MainWindow_Closed;
 
         UpdateButtonStates();
-    }
-
-    private AppConfig LoadConfig()
-    {
-        try
-        {
-            var configuration = new ConfigurationBuilder()
-                .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
-                .AddJsonFile(_configFilePath, optional: false, reloadOnChange: true)
-                .Build();
-
-            var config = configuration.Get<AppConfig>() ?? new AppConfig();
-            
-            // Проверяем наличие ClientId и LastFmApiKey
-            if (string.IsNullOrEmpty(config.ClientId) || string.IsNullOrEmpty(config.LastFmApiKey) || config.LastFmApiKey == "YOUR_LAST_FM_API_KEY_HERE")
-            {
-                System.Windows.MessageBox.Show("Error: ClientId or LastFmApiKey not found or not set in appsettings.json. Please check the file.", 
-                                               "Configuration Error", 
-                                               System.Windows.MessageBoxButton.OK, 
-                                               System.Windows.MessageBoxImage.Error);
-                Application.Current.Shutdown();
-                // Возвращаем пустой конфиг или кидаем исключение, чтобы прервать выполнение
-                return new AppConfig(); 
-            }
-            
-            Debug.WriteLine($"Config loaded: ClientId={(string.IsNullOrEmpty(config.ClientId) ? "MISSING" : "OK")}, LastFmApiKey={(string.IsNullOrEmpty(config.LastFmApiKey) || config.LastFmApiKey == "YOUR_LAST_FM_API_KEY_HERE" ? "MISSING/DEFAULT" : "OK")}, LastSelectedSource='{config.LastSelectedSourceAppId ?? "None"}'");
-            return config;
-        }
-        catch (FileNotFoundException)
-        {
-             System.Windows.MessageBox.Show($"Error: Configuration file '{_configFilePath}' not found.", 
-                                            "Configuration Error", 
-                                            System.Windows.MessageBoxButton.OK, 
-                                            System.Windows.MessageBoxImage.Error);
-             Application.Current.Shutdown();
-             return new AppConfig(); 
-        }
-        catch (Exception ex)
-        {
-            System.Windows.MessageBox.Show($"Error loading configuration: {ex.Message}", 
-                                           "Configuration Error", 
-                                           System.Windows.MessageBoxButton.OK, 
-                                           System.Windows.MessageBoxImage.Error);
-            Application.Current.Shutdown();
-            return new AppConfig(); 
-        }
-    }
-
-    private void SaveConfig()
-    {
-        try
-        {
-            _config.LastSelectedSourceAppId = _mediaStateManager?.SelectedSourceAppId;
-            // Сохраняем текущую тему как строку
-            _config.PreferredTheme = _currentAppTheme.ToString();
-            
-            var options = new JsonSerializerOptions { WriteIndented = true };
-            string json = JsonSerializer.Serialize(_config, options);
-            File.WriteAllText(_configFilePath, json);
-            Debug.WriteLine($"Configuration saved to '{_configFilePath}' with LastSelectedSourceAppId='{_config.LastSelectedSourceAppId ?? "null"}' and PreferredTheme='{_config.PreferredTheme}'");
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Error saving configuration: {ex.Message}");
-        }
     }
 
     private void InitializeDiscord()
@@ -185,18 +148,34 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             Debug.WriteLine("Discord client already initialized.");
             return;
         }
-
-        if (string.IsNullOrEmpty(_config.ClientId))
+        
+        // --- Получаем Client ID ---
+        string clientId;
+        try
         {
-            UpdateStatusText("Error: ClientID is not configured.");
-            System.Windows.MessageBox.Show("Discord Client ID is missing in appsettings.json", 
+            clientId = Encoding.UTF8.GetString(Convert.FromBase64String(EncodedClientId));
+        }
+        catch (FormatException ex)
+        {
+             UpdateStatusText("Error: Invalid embedded ClientID.");
+             System.Windows.MessageBox.Show($"Error decoding embedded ClientID: {ex.Message}. Please contact the developer.", 
+                                            "Configuration Error", 
+                                            System.Windows.MessageBoxButton.OK, 
+                                            System.Windows.MessageBoxImage.Error);
+             return;
+        }
+        if (string.IsNullOrEmpty(clientId))
+        {
+            UpdateStatusText("Error: ClientID is not configured (embedded).");
+            System.Windows.MessageBox.Show("Embedded Discord Client ID is missing. Please contact the developer.", 
                                            "Configuration Error", 
                                            System.Windows.MessageBoxButton.OK, 
                                            System.Windows.MessageBoxImage.Error);
             return;
         }
+        // -------------------------
 
-        _client = new DiscordRpcClient(_config.ClientId);
+        _client = new DiscordRpcClient(clientId); // Используем раскодированный clientId
         _client.Logger = new ConsoleLogger() { Level = LogLevel.Warning };
 
         _client.OnReady += (sender, e) =>
@@ -635,23 +614,11 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
     private void MainWindow_Closed(object? sender, EventArgs e)
     {
-         if (_sessionManager != null)
-         {
-            _sessionManager.SessionsChanged -= SessionsChangedHandler;
-         }
-         if (_currentSession != null)
-         {
-             _currentSession.MediaPropertiesChanged -= MediaPropertiesChangedHandler;
-             _currentSession.PlaybackInfoChanged -= PlaybackInfoChangedHandler;
-             _currentSession = null;
-         }
-         _sessionManager = null;
-
-        _presenceUpdateDebounceTimer?.Stop();
-        _presenceUpdateDebounceTimer = null;
-
-        DisconnectDiscord();
-        SaveConfig(); // Сохраняем конфиг перед закрытием
+        _client?.Dispose();
+        _sessionManager = null; // Явно освобождаем ресурсы SMTC
+        _sharedHttpClient?.Dispose();
+        // Закрываем приложение полностью
+        Application.Current.Shutdown();
     }
 
     private void SwitchToSession(GlobalSystemMediaTransportControlsSession? newSession)
@@ -806,4 +773,59 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         AboutWindow aboutWindow = new AboutWindow();
         aboutWindow.ShowDialog(); // Открываем как модальное окно
     }
+
+    // --- Логика сворачивания/разворачивания в трей ---
+    
+    private void MainWindow_StateChanged(object sender, EventArgs e)
+    {
+        if (WindowState == WindowState.Minimized)
+        {
+            this.Hide(); // Скрываем окно с панели задач
+            MyNotifyIcon.Visibility = Visibility.Visible; // Показываем иконку в трее
+        }
+        else
+        {
+            // При любом другом состоянии (Normal, Maximized) убеждаемся, что иконка скрыта,
+            // если мы хотим, чтобы она была видна ТОЛЬКО при сворачивании.
+            // Если иконка должна быть видна всегда, эту строку можно убрать.
+            // MyNotifyIcon.Visibility = Visibility.Collapsed; 
+        }
+    }
+
+    private void NotifyIcon_TrayMouseDoubleClick(object sender, RoutedEventArgs e)
+    {
+        ShowAndActivateWindow();
+    }
+
+    private void MenuItemShow_Click(object sender, RoutedEventArgs e)
+    {
+        ShowAndActivateWindow();
+    }
+
+    private void MenuItemExit_Click(object sender, RoutedEventArgs e)
+    {
+        MyNotifyIcon.Dispose(); // Освобождаем ресурсы иконки
+        Application.Current.Shutdown();
+    }
+    
+    private void ShowAndActivateWindow()
+    {
+        this.Show();
+        this.WindowState = WindowState.Normal;
+        this.Activate(); // Делаем окно активным
+        MyNotifyIcon.Visibility = Visibility.Collapsed; // Скрываем иконку при разворачивании
+    }
+    
+    // --- Переопределение закрытия окна (опционально) ---
+    // Если раскомментировать, кнопка "Закрыть" будет сворачивать в трей
+    /*
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        // Вместо закрытия сворачиваем в трей
+        e.Cancel = true; // Отменяем закрытие
+        WindowState = WindowState.Minimized;
+        base.OnClosing(e);
+    }
+    */
+    // ---------------------------------------------------
 }
