@@ -1,16 +1,17 @@
 # Chip
 
-Небольшая программа для отслеживания медиа активностей и трансляции их в активность дискорда
+Небольшая программа для отслеживания медиа активностей и трансляции их в активность дискорда.
 
-## How to Use
+## Как использовать
 
-1.  Download the latest release from the [Releases](../../releases) page.
-2.  Unzip the archive if necessary.
-3.  Run the executable file (`CustomMediaRPC.exe` on Windows).
+1.  Скачайте файл `Setup.exe` из последнего релиза на странице [Релизы](../../releases).
+2.  Запустите `Setup.exe` для установки приложения. Velopack автоматически обработает установку и обновления.
+3.  Приложение (`CustomMediaRPC.exe`) должно запуститься автоматически после установки.
 
-## Building from Source
+## Сборка из исходного кода
 
-1.  Clone the repository: `git clone <repository-url>`
-2.  Navigate to the project directory: `cd CustomMediaRPC`
-3.  Build the project: `dotnet build`
-4.  Run the project
+1.  Клонируйте репозиторий: `git clone https://github.com/RaspizDIYs/CustomRPC.git` (Замените URL, если он отличается)
+2.  Перейдите в директорию проекта: `cd CustomRPC` (Или имя вашей локальной папки)
+3.  Восстановите зависимости и соберите проект: `dotnet build -c Release`
+4.  Исполняемый файл можно найти в `CustomMediaRPC/bin/Release/netX.Y-windows.../` (где `netX.Y` - версия целевой платформы, например `net9.0`).
+5.  Для создания релизных пакетов (включая установщик) используйте скрипт `release.ps1` (убедитесь, что необходимые инструменты, такие как `vpk` и `gh`, установлены и настроены).
