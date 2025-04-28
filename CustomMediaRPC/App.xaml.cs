@@ -5,9 +5,6 @@ using CustomMediaRPC.Views;
 using Velopack;
 using Velopack.Sources;
 
-// Добавляем атрибут для Squirrel
-[assembly: System.Reflection.AssemblyMetadata("SquirrelAwareVersion", "1")]
-
 namespace CustomMediaRPC;
 
 /// <summary>
@@ -17,21 +14,42 @@ public partial class App : Application
 {
     public static UpdateManager? UpdateManager { get; private set; }
 
+    public App()
+    {
+        try
+        {
+            VelopackApp.Build().Run();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Критическая ошибка инициализации Velopack: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            // Возможно, стоит завершить приложение?
+            // Shutdown();
+        }
+    }
+
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
         try
         {
-            VelopackApp.Build().Run();
-
+            // Инициализируем UpdateManager ТОЛЬКО при обычном запуске
+            // (т.к. VelopackApp.Run() уже обработал служебные запуски в Main)
             UpdateManager = new UpdateManager(new GithubSource("https://github.com/RaspizDIYs/CustomRPC", null, false));
-
-            await CheckForUpdates();
+            
+            if (UpdateManager?.IsInstalled == true) // Проверяем, установлено ли приложение и инициализирован ли менеджер
+            {
+                // Запускаем проверку обновлений
+                await CheckForUpdates();
+            } else
+            {
+                Console.WriteLine("Приложение не установлено через Velopack или UpdateManager null, пропускаем проверку обновлений.");
+            }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Ошибка на старте: {ex.Message}");
+            Console.WriteLine($"Ошибка инициализации UpdateManager или проверки обновлений: {ex.Message}");
         }
 
         var mainWindow = new Views.MainWindow();
@@ -40,9 +58,9 @@ public partial class App : Application
 
     private async Task CheckForUpdates()
     {
-        if (UpdateManager == null || !UpdateManager.IsInstalled)
+        if (UpdateManager == null)
         {
-            Console.WriteLine("Пропуск проверки обновлений (приложение не установлено или менеджер не доступен).");
+            Console.WriteLine("UpdateManager не инициализирован, пропуск проверки обновлений.");
             return;
         }
 
