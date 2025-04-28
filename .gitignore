@@ -159,4 +159,13 @@ _NCrunch*
 appsettings.json
 publish*
 
+# Добавлено: Папки с результатами сборки/релиза
+PublishOutput/
+Releases/
+publish_output4/
+
+# Добавлено: Архивы и текстовые файлы в корне
+/*.zip
+/*.txt
+
 release.ps1
