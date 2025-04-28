@@ -158,3 +158,5 @@ _NCrunch*
 
 appsettings.json
 publish*
+
+release.ps1
