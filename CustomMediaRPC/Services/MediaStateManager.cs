@@ -10,7 +10,7 @@ namespace CustomMediaRPC.Services;
 
 public class MediaStateManager
 {
-    private readonly LastFmService _lastFmService;
+    private readonly SpotifyService _spotifyService;
     private MediaState _currentState;
     private string? _selectedSourceAppId;
     private DateTime _lastPresenceUpdateTime = DateTime.MinValue;
@@ -19,11 +19,14 @@ public class MediaStateManager
     private DateTime _lastStateChangeTime = DateTime.MinValue;
     private DateTime? _currentTrackStartTime;
 
-    public MediaStateManager(LastFmService lastFmService)
+    // Делаем публичное свойство для доступа к времени старта трека
+    public DateTime? CurrentTrackStartTime => _currentTrackStartTime;
+
+    public MediaStateManager(SpotifyService spotifyService)
     {
-        _lastFmService = lastFmService ?? throw new ArgumentNullException(nameof(lastFmService));
+        _spotifyService = spotifyService ?? throw new ArgumentNullException(nameof(spotifyService));
         _currentState = new MediaState();
-        Debug.WriteLine($"MediaStateManager initialized with LastFmService: {lastFmService.GetHashCode()}");
+        Debug.WriteLine($"MediaStateManager initialized with SpotifyService: {spotifyService.GetHashCode()}");
     }
 
     public string? SelectedSourceAppId
@@ -126,40 +129,63 @@ public class MediaStateManager
 
             // Пытаемся получить информацию об обложке
             if (!string.IsNullOrWhiteSpace(_currentState.Artist) && 
-                !string.IsNullOrWhiteSpace(_currentState.Title) && // Теперь проверяем и Title
+                !string.IsNullOrWhiteSpace(_currentState.Title) && 
                 _currentState.Artist != Constants.Media.UNKNOWN_ARTIST &&
                 _currentState.Title != Constants.Media.UNKNOWN_TITLE)
             {
-                 Debug.WriteLine($"BuildRichPresenceAsync: Attempting to fetch album art for Artist='{_currentState.Artist}', Track='{_currentState.Title}', Album='{_currentState.Album ?? "N/A"}'");
-                 // Вызываем новый метод GetAlbumArtInfoAsync
-                var albumArtInfo = await _lastFmService.GetAlbumArtInfoAsync(_currentState.Artist, _currentState.Title, _currentState.Album);
+                 Debug.WriteLine($"BuildRichPresenceAsync: Attempting to fetch album art (likely from cache or direct call) for Artist='{_currentState.Artist}', Track='{_currentState.Title}', Album='{_currentState.Album ?? "N/A"}'");
+                 // Вызываем метод SpotifyService
+                var albumArtInfo = await _spotifyService.GetAlbumArtInfoAsync(_currentState.Artist, _currentState.Title, _currentState.Album);
                 
                 if (!string.IsNullOrEmpty(albumArtInfo?.ImageUrl))
                 {
-                    largeImageUrl = albumArtInfo.ImageUrl; // Используем найденный URL
-                    // Используем найденное название альбома, если есть, иначе исходное, иначе трек
+                    largeImageUrl = albumArtInfo.ImageUrl; 
                     largeImageText = albumArtInfo.AlbumTitle ?? _currentState.Album ?? _currentState.Title ?? string.Empty;
-                    Debug.WriteLine($"BuildRichPresenceAsync: Found album art via Last.fm: {largeImageUrl}, Album: {albumArtInfo.AlbumTitle ?? "Unknown"}");
+                    Debug.WriteLine($"BuildRichPresenceAsync: Found album art via Spotify: {largeImageUrl}, Album: {albumArtInfo.AlbumTitle ?? "Unknown"}");
                 }
                 else
                 {
-                    // Если albumArtInfo не null, но ImageUrl пустой, значит Last.fm вернул инфо об альбоме, но без картинки
                     if (albumArtInfo?.AlbumTitle != null)
                     {
-                         largeImageText = albumArtInfo.AlbumTitle; // Используем найденное название альбома для текста
-                         Debug.WriteLine($"BuildRichPresenceAsync: Last.fm found album info ('{albumArtInfo.AlbumTitle}') but no suitable image URL.");
+                         largeImageText = albumArtInfo.AlbumTitle; 
+                        Debug.WriteLine($"BuildRichPresenceAsync: Spotify found album info ('{albumArtInfo.AlbumTitle}') but no suitable image URL.");
                     }
                     else
-                    {   // Если и albumArtInfo null, значит Last.fm ничего не нашел
-                        largeImageText = _currentState.Album ?? _currentState.Title ?? string.Empty; // Возвращаемся к исходному альбому/треку для текста
-                        Debug.WriteLine("BuildRichPresenceAsync: No album art or info found via Last.fm.");
+                    {   
+                        largeImageText = _currentState.Album ?? _currentState.Title ?? string.Empty; 
+                        Debug.WriteLine("BuildRichPresenceAsync: No album art or info found via Spotify.");
                     }
                 }
             }
             else
             {
-                 Debug.WriteLine($"BuildRichPresenceAsync: Skipping Last.fm lookup (Artist or Title is missing/unknown).");
+                 Debug.WriteLine($"BuildRichPresenceAsync: Skipping Spotify lookup (Artist or Title is missing/unknown).");
             }
+
+            // --- Проверка длины largeImageText --- 
+            if (largeImageText.Length < 2)
+            {
+                 Debug.WriteLine($"BuildRichPresenceAsync: Initial largeImageText ('{largeImageText}') is too short (< 2 chars).");
+                 // Пытаемся использовать название трека
+                 if (!string.IsNullOrEmpty(_currentState.Title) && _currentState.Title.Length >= 2)
+                 {
+                     largeImageText = _currentState.Title;
+                     Debug.WriteLine($"BuildRichPresenceAsync: Falling back to Title: '{largeImageText}'");
+                 }
+                 // Если трек тоже короткий или пустой, используем Details (Artist - Title)
+                 else if (!string.IsNullOrEmpty(detailsText) && detailsText.Length >= 2)
+                 {
+                     largeImageText = detailsText;
+                     Debug.WriteLine($"BuildRichPresenceAsync: Falling back to Details: '{largeImageText}'");
+                 }
+                 // В крайнем случае, используем дефолт
+                 else
+                 {
+                     largeImageText = "Album Art"; 
+                     Debug.WriteLine($"BuildRichPresenceAsync: Falling back to default 'Album Art'");
+                 }
+            }
+            // --- Конец проверки длины --- 
 
             string safeDetails = StringUtils.TruncateStringByBytesUtf8(detailsText, Constants.Media.MAX_PRESENCE_TEXT_LENGTH);
             string safeState = StringUtils.TruncateStringByBytesUtf8(stateText, Constants.Media.MAX_PRESENCE_TEXT_LENGTH);
@@ -225,6 +251,13 @@ public class MediaStateManager
         _lastPresenceUpdateTime = now;
         _lastSentPresence = newPresence; // Обновляем кэш ПОСЛЕ принятия решения об отправке
         return true;
+    }
+
+    // Новый метод для установки последнего отправленного presence извне
+    public void SetLastSentPresence(RichPresence? presence)
+    {
+        _lastSentPresence = presence;
+        Debug.WriteLine($"SetLastSentPresence explicitly set. Details: {presence?.Details ?? "null"}");
     }
 
     private bool AreRichPresenceEqual(RichPresence? p1, RichPresence? p2)

@@ -35,7 +35,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private DiscordRpcClient? _client;
     private MediaStateManager? _mediaStateManager;
     private HttpClient? _sharedHttpClient;
-    private LastFmService? _lastFmService;
+    private SpotifyService? _spotifyService;
 
     private GlobalSystemMediaTransportControlsSessionManager? _sessionManager;
     private GlobalSystemMediaTransportControlsSession? _currentSession;
@@ -123,8 +123,8 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
         // --- Инициализируем HttpClient и сервисы, используя раскодированные ключи ---
         _sharedHttpClient = new HttpClient();
-        _lastFmService = new LastFmService(_sharedHttpClient, lastFmApiKey); // Используем переменную
-        _mediaStateManager = new MediaStateManager(_lastFmService);
+        _spotifyService = new SpotifyService();
+        _mediaStateManager = new MediaStateManager(_spotifyService);
         // --------------------------------------------------------------------------
 
         Dispatcher.InvokeAsync(InitializeMediaIntegration);
@@ -547,9 +547,9 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
     private async Task UpdatePresenceFromSession()
     {
-        if (!_isRpcConnected || _client == null || !_client.IsInitialized || _mediaStateManager == null)
+        if (!_isRpcConnected || _client == null || !_client.IsInitialized || _mediaStateManager == null || _spotifyService == null)
         {
-            Debug.WriteLine($"UpdatePresenceFromSession skipped: Preconditions not met (RPC Connected: {_isRpcConnected}, Client Valid: {_client != null && _client.IsInitialized}, StateManager Valid: {_mediaStateManager != null})");
+            Debug.WriteLine($"UpdatePresenceFromSession skipped: Preconditions not met (RPC Connected: {_isRpcConnected}, Client Valid: {_client != null && _client.IsInitialized}, StateManager Valid: {_mediaStateManager != null}, SpotifyService Valid: {_spotifyService != null})");
             return;
         }
 
@@ -565,7 +565,61 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
         try
         {
-            RichPresence? newPresence = await _mediaStateManager.BuildRichPresenceAsync(_currentSession);
+             // --- НОВАЯ ЛОГИКА С КЕШЕМ SPOTIFY --- 
+             CustomMediaRPC.Models.MediaState currentState = _mediaStateManager.CurrentState;
+             RichPresence? presenceToSend = null;
+
+            // Проверяем, можно ли вообще искать обложку (есть артист и трек)
+             bool canFetchArt = !string.IsNullOrWhiteSpace(currentState.Artist) && 
+                               !string.IsNullOrWhiteSpace(currentState.Title) && 
+                               currentState.Artist != Constants.Media.UNKNOWN_ARTIST &&
+                               currentState.Title != Constants.Media.UNKNOWN_TITLE;
+
+             if (canFetchArt && !_spotifyService.TryGetCachedAlbumArtInfo(currentState.Artist!, currentState.Title!, currentState.Album, out _))
+             {
+                // --- СЛУЧАЙ 1: Можно искать, но в кеше нет --- 
+                Debug.WriteLine($"UpdatePresenceFromSession: Spotify cache MISS for {currentState.Artist} - {currentState.Title}. Sending presence with default image and triggering background fetch.");
+                
+                // Строим базовый presence с дефолтной картинкой (нужно извлечь основную логику из BuildRichPresenceAsync или дублировать частично)
+                // Упрощенный вариант: Создаем базовый presence здесь
+                string detailsText = currentState.GetDisplayTitle();
+                string stateText = currentState.GetStatusText();
+                // Используем публичное свойство
+                Timestamps? timestamps = (currentState.Status == MediaPlaybackStatus.Playing && _mediaStateManager.CurrentTrackStartTime.HasValue) 
+                                       ? new Timestamps { Start = _mediaStateManager.CurrentTrackStartTime.Value } 
+                                       : null;
+
+                presenceToSend = new RichPresence
+                {
+                    Details = StringUtils.TruncateStringByBytesUtf8(detailsText, Constants.Media.MAX_PRESENCE_TEXT_LENGTH),
+                    State = StringUtils.TruncateStringByBytesUtf8(stateText, Constants.Media.MAX_PRESENCE_TEXT_LENGTH),
+                    Assets = new Assets
+                    {
+                        LargeImageKey = Constants.Media.DEFAULT_IMAGE_URL, // Дефолтная картинка
+                        LargeImageText = StringUtils.TruncateStringByBytesUtf8(currentState.Album ?? currentState.Title ?? string.Empty, Constants.Media.MAX_PRESENCE_TEXT_LENGTH)
+                    },
+                    Timestamps = timestamps
+                };
+
+                // Запускаем получение обложки в фоне (fire-and-forget)
+                _ = _spotifyService.GetAlbumArtInfoAsync(currentState.Artist!, currentState.Title!, currentState.Album);
+
+                 // Обновляем _lastSentPresence в MediaStateManager этим временным состоянием,
+                 // чтобы ShouldUpdatePresence не сработал ложно при следующем вызове, пока фон не отработал.
+                 _mediaStateManager.SetLastSentPresence(presenceToSend); 
+             }
+             else
+             {
+                // --- СЛУЧАЙ 2: Нельзя искать ИЛИ в кеше есть --- 
+                Debug.WriteLine($"UpdatePresenceFromSession: Spotify cache HIT or skipping lookup for {currentState.Artist} - {currentState.Title}. Building presence normally.");
+                 // Строим presence как обычно, вызывая BuildRichPresenceAsync,
+                 // который теперь либо возьмет из кеша, либо пропустит поиск, либо использует дефолтную картинку.
+                 presenceToSend = await _mediaStateManager.BuildRichPresenceAsync(_currentSession);
+             }
+             // --- КОНЕЦ НОВОЙ ЛОГИКИ ---
+
+            // RichPresence? newPresence = await _mediaStateManager.BuildRichPresenceAsync(_currentSession); // Старая строка
+            RichPresence? newPresence = presenceToSend; // Используем результат логики выше
 
             if (newPresence == null)
             {
@@ -594,9 +648,8 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"--- Full Exception Details ---");
             Debug.WriteLine($"Error updating presence: {ex}");
-            UpdateStatusText($"Error updating presence: {ex.Message}");
+            UpdateStatusText("Error updating presence.");
         }
     }
 
