@@ -23,8 +23,25 @@ using System.Windows.Documents;
 using Wpf.Ui.Controls;
 using System.Text; // Добавим для Base64
 using System.ComponentModel; // Добавили для Closing
+using System.Windows.Data; // Добавлено для конвертера
+using System.Globalization; // Добавлено для конвертера
+using System.Reflection; // Для получения версии
 
 namespace CustomMediaRPC.Views;
+
+// Конвертер для видимости TextBox
+public class BooleanToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        return (value is bool b && b) ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        return (value is Visibility v && v == Visibility.Visible);
+    }
+}
 
 /// <summary>
 /// Interaction logic for MainWindow.xaml
@@ -32,6 +49,7 @@ namespace CustomMediaRPC.Views;
 public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 {
     private AppConfig? _config; // Сделали nullable
+    private AppSettings _appSettings; // Добавлено
     private DiscordRpcClient? _client;
     private MediaStateManager? _mediaStateManager;
     private HttpClient? _sharedHttpClient;
@@ -54,10 +72,27 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private const string EncodedLastFmApiKey = "NTU4MDdkZjA4MjhmMTdkNGY0YWYwZWJmYzU3Y2I4MTk="; // Base64 of "55807df0828f17d4f4af0ebfc57cb819"
     // -------------------------------------
 
-    public MainWindow()
+    public MainWindow(AppSettings settings) // Изменен конструктор
     {
         InitializeComponent();
+        _appSettings = settings; // Сохраняем настройки
         
+        // Устанавливаем DataContext для привязок в XAML
+        this.DataContext = new { Settings = _appSettings }; 
+        
+        // --- Получение и отображение версии --- 
+        try
+        {
+            var version = Assembly.GetExecutingAssembly().GetName().Version;
+            VersionTextBlock.Text = version != null ? $"v{version.Major}.{version.Minor}.{version.Build}" : "v?.?.?";
+        }
+        catch (Exception ex)
+        {
+            VersionTextBlock.Text = "v.err";
+            DebugLogger.Log("Error getting application version", ex);
+        }
+        // ------------------------------------
+
         // --- Инициализация Config с захардкоженными значениями ---
         string clientId;
         string lastFmApiKey;
@@ -110,7 +145,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                 SystemTheme.Dark => ApplicationTheme.Dark,
                 _ => ApplicationTheme.Dark 
             };
-            Debug.WriteLine($"Applying system theme: {themeToApply} (Detected: {systemTheme})");
+            DebugLogger.Log($"Applying system theme: {themeToApply} (Detected: {systemTheme})");
         // }
 
         ApplicationThemeManager.Apply(themeToApply);
@@ -121,10 +156,10 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         // -------------------------------\
 
 
-        // --- Инициализируем HttpClient и сервисы, используя раскодированные ключи ---
+        // --- Инициализируем HttpClient и сервисы, используя раскодированные ключи и настройки ---
         _sharedHttpClient = new HttpClient();
-        _spotifyService = new SpotifyService();
-        _mediaStateManager = new MediaStateManager(_spotifyService);
+        _spotifyService = new SpotifyService(_appSettings); // Передаем настройки
+        _mediaStateManager = new MediaStateManager(_spotifyService, _appSettings); // Передаем настройки
         // --------------------------------------------------------------------------
 
         Dispatcher.InvokeAsync(InitializeMediaIntegration);
@@ -139,13 +174,13 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         if (_currentSession == null) 
         {
             UpdateStatusText("Please select a media source first.");
-            Debug.WriteLine("InitializeDiscord skipped: No source selected.");
+            DebugLogger.Log("InitializeDiscord skipped: No source selected.");
             return;
         }
 
         if (_client != null && _client.IsInitialized)
         {
-            Debug.WriteLine("Discord client already initialized.");
+            DebugLogger.Log("Discord client already initialized.");
             return;
         }
         
@@ -180,34 +215,30 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
         _client.OnReady += (sender, e) =>
         {
-            Debug.WriteLine($"Received Ready from user {e.User.Username}");
-            Dispatcher.InvokeAsync(async () => { 
-                try 
-                {
-                    _isRpcConnected = true;
-                    UpdateStatusText($"Connected as {e.User.Username}");
-                    UpdateButtonStates();
-                    // Обновляем статус сразу после подключения
-                    if (_currentSession != null)
-                    {
-                        await UpdatePresenceFromSession();
-                    }
-                    Debug.WriteLine("OnReady Dispatcher actions completed successfully.");
-                }
-                catch (Exception ex)
-                {
-                     Debug.WriteLine($"!!! EXCEPTION in OnReady Dispatcher: {ex.ToString()}");
-                }
+            Dispatcher.InvokeAsync(async () =>
+            {
+                DebugLogger.Log($"Received Ready from user {e.User.Username}");
+                _isRpcConnected = true;
+
+                // Сбрасываем последнее отправленное состояние при переподключении
+                _mediaStateManager?.SetLastSentPresence(null);
+
+                // Немедленно пытаемся обновить статус из текущего состояния
+                await UpdatePresenceFromSession();
+
+                UpdateStatusText($"Connected as {e.User.Username}");
+                UpdateButtonStates();
+                DebugLogger.Log("OnReady Dispatcher actions completed successfully.");
             });
         };
 
         _client.OnPresenceUpdate += (sender, e) =>
         {
-            Debug.WriteLine($"Presence updated!");
+            DebugLogger.Log($"Presence updated!");
         };
 
         _client.OnError += (sender, e) => {
-            Debug.WriteLine($"Discord Error: {e.Message}");
+            DebugLogger.Log($"Discord Error: {e.Message} (Code: {e.Code})");
             UpdateStatusText($"Discord Error: {e.Code}");
         };
 
@@ -229,17 +260,17 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
             _sessionManager.SessionsChanged += SessionsChangedHandler;
 
-            if (!string.IsNullOrEmpty(_config.LastSelectedSourceAppId))
+            if (_config != null && !string.IsNullOrEmpty(_config.LastSelectedSourceAppId))
             {
-                if (_mediaStateManager != null) 
+                if (_mediaStateManager != null)
                 {
                     _mediaStateManager.SelectedSourceAppId = _config.LastSelectedSourceAppId;
                 }
-                Debug.WriteLine($"InitializeMediaIntegration: Loaded saved source ID '{_config.LastSelectedSourceAppId}' into MediaStateManager.");
+                DebugLogger.Log($"InitializeMediaIntegration: Loaded saved source ID \'{_config.LastSelectedSourceAppId}\' into MediaStateManager.");
             }
             else
             {
-                 Debug.WriteLine("InitializeMediaIntegration: No saved source ID found.");
+                 DebugLogger.Log("InitializeMediaIntegration: No saved source ID found or _config is null.");
             }
 
             await UpdateSessionList();
@@ -247,23 +278,23 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"SMTC Initialization Error: {ex.Message}");
+            DebugLogger.Log($"SMTC Initialization Error", ex);
             UpdateStatusText($"SMTC Error: {ex.Message}");
         }
     }
 
     private async void SessionsChangedHandler(GlobalSystemMediaTransportControlsSessionManager? sender, SessionsChangedEventArgs? args)
     {
-        Debug.WriteLine("SessionsChangedHandler triggered.");
+        DebugLogger.Log("SessionsChangedHandler triggered.");
         // Проверяем флаг перед запуском обновления И СОСТОЯНИЕ ПОДКЛЮЧЕНИЯ
         if (!_isUpdatingSessionList && !_isRpcConnected)
         {
-            Debug.WriteLine("SessionsChangedHandler: Calling UpdateSessionList.");
+            DebugLogger.Log("SessionsChangedHandler: Calling UpdateSessionList.");
             await Dispatcher.InvokeAsync(UpdateSessionList);
         }
         else
         {
-            Debug.WriteLine($"SessionsChangedHandler skipped: isUpdating={_isUpdatingSessionList}, isConnected={_isRpcConnected}");
+            DebugLogger.Log($"SessionsChangedHandler skipped: isUpdating={_isUpdatingSessionList}, isConnected={_isRpcConnected}");
         }
     }
 
@@ -272,27 +303,27 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         // Добавляем проверку на активное подключение в самом начале
         if (_isRpcConnected)
         {
-             Debug.WriteLine("UpdateSessionList skipped: RPC is connected. Source list update is paused.");
+             DebugLogger.Log("UpdateSessionList skipped: RPC is connected. Source list update is paused.");
              return;
         }
         
         // Блокируем повторный вход
         if (_isUpdatingSessionList) {
-             Debug.WriteLine("UpdateSessionList skipped: Already running.");
+             DebugLogger.Log("UpdateSessionList skipped: Already running.");
              return;
         }
         _isUpdatingSessionList = true;
 
         if (_sessionManager == null) {
-            Debug.WriteLine("UpdateSessionList skipped: Session manager is null.");
+            DebugLogger.Log("UpdateSessionList skipped: Session manager is null.");
              _isUpdatingSessionList = false;
             return;
         }
-        Debug.WriteLine("--- UpdateSessionList started ---");
+        DebugLogger.Log("--- UpdateSessionList started ---");
 
         // Используем ?. 
         string? desiredAppId = _mediaStateManager?.SelectedSourceAppId;
-        Debug.WriteLine($"UpdateSessionList: Desired AppId (from StateManager): {desiredAppId ?? "null"}");
+        DebugLogger.Log($"UpdateSessionList: Desired AppId (from StateManager): {desiredAppId ?? "null"}");
 
         try
         {
@@ -300,7 +331,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             _allSessions = sessions?.ToList() ?? new List<GlobalSystemMediaTransportControlsSession>();
             // --- ЛОГИРОВАНИЕ СЕССИЙ ---
             var sessionIds = _allSessions.Select(s => s?.SourceAppUserModelId ?? "null_session_object").ToList();
-            Debug.WriteLine($"UpdateSessionList: Found {_allSessions.Count} sessions. IDs: [{string.Join(", ", sessionIds)}]");
+            DebugLogger.Log($"UpdateSessionList: Found {_allSessions.Count} sessions. IDs: [{string.Join(", ", sessionIds)}]");
             // --------------------------
 
             _isComboBoxUpdate = true; // Ставим флаг, чтобы SelectionChanged не срабатывал при очистке/заполнении
@@ -308,12 +339,12 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
             if (!_allSessions.Any())
             {
-                Debug.WriteLine("UpdateSessionList: No media sources detected.");
+                DebugLogger.Log("UpdateSessionList: No media sources detected.");
                 SessionComboBox.Items.Add(new ComboBoxItem { Content = "No media sources detected", IsEnabled = false });
                 SessionComboBox.IsEnabled = false;
                 if (_currentSession != null)
                 {
-                    Debug.WriteLine("UpdateSessionList: Clearing current session as no sources detected.");
+                    DebugLogger.Log("UpdateSessionList: Clearing current session as no sources detected.");
                     // Важно: не вызываем SwitchToSession отсюда, чтобы не было рекурсии или гонки.
                     // Очистка произойдет через установку SelectedIndex = -1 ниже.
                 }
@@ -354,14 +385,14 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             if (desiredAppId != null)
             {
                 bool foundDesiredId = false; // Флаг для логирования
-                Debug.WriteLine($"UpdateSessionList: Attempting to find desired AppId '{desiredAppId}' in the current list...");
+                DebugLogger.Log($"UpdateSessionList: Attempting to find desired AppId '{desiredAppId}' in the current list...");
                 for (int i = 0; i < comboBoxItems.Count; i++)
                 {
                     if (comboBoxItems[i].Tag is GlobalSystemMediaTransportControlsSession s && s.SourceAppUserModelId == desiredAppId)
                     {
                         targetIndex = i;
                         foundDesiredId = true; // Нашли!
-                        Debug.WriteLine($"UpdateSessionList: Found desired AppId '{desiredAppId}' at index {i}");
+                        DebugLogger.Log($"UpdateSessionList: Found desired AppId '{desiredAppId}' at index {i}");
                         break;
                     }
                 }
@@ -369,12 +400,12 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                  // Это значит, что источник временно пропал, НЕ выбираем ничего другого.
                  if (!foundDesiredId) // Используем флаг для точности лога
                  {
-                     Debug.WriteLine($"UpdateSessionList: Desired AppId '{desiredAppId}' was NOT FOUND in the current list of sessions: [{string.Join(", ", sessionIds)}]. Will select nothing.");
+                     DebugLogger.Log($"UpdateSessionList: Desired AppId '{desiredAppId}' was NOT FOUND in the current list of sessions: [{string.Join(", ", sessionIds)}]. Will select nothing.");
                  }
             }
             else // 2. desiredAppId == null (т.е. пользователь ничего не выбирал или сбросил выбор)
             {   
-                 Debug.WriteLine("UpdateSessionList: No desired AppId. Looking for current session or playing session...");
+                 DebugLogger.Log("UpdateSessionList: No desired AppId. Looking for current session or playing session...");
                 // Сначала ищем текущую активную сессию (_currentSession), если она есть и присутствует в списке
                 if (_currentSession != null)
                 {
@@ -383,7 +414,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                          if (comboBoxItems[i].Tag is GlobalSystemMediaTransportControlsSession s && s.SourceAppUserModelId == _currentSession.SourceAppUserModelId)
                          {
                              targetIndex = i;
-                             Debug.WriteLine($"UpdateSessionList: Found current session '{_currentSession.SourceAppUserModelId}' at index {i}");
+                             DebugLogger.Log($"UpdateSessionList: Found current session '{_currentSession.SourceAppUserModelId}' at index {i}");
                              break;
                          }
                     }
@@ -392,14 +423,14 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                 // Если текущая сессия не найдена (или ее не было), ищем первую играющую
                 if (targetIndex == -1)
                 {
-                    Debug.WriteLine("UpdateSessionList: Current session not found or null. Looking for a playing session...");
+                    DebugLogger.Log("UpdateSessionList: Current session not found or null. Looking for a playing session...");
                     for (int i = 0; i < comboBoxItems.Count; i++)
                     {
                         if (comboBoxItems[i].Tag is GlobalSystemMediaTransportControlsSession s &&
                             s.GetPlaybackInfo()?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing)
                         {
                             targetIndex = i;
-                            Debug.WriteLine($"UpdateSessionList: Found playing session '{s.SourceAppUserModelId}' at index {i}");
+                            DebugLogger.Log($"UpdateSessionList: Found playing session '{s.SourceAppUserModelId}' at index {i}");
                             break;
                         }
                     }
@@ -408,31 +439,31 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                 // Если ничего не найдено, выбираем первую
                 if (targetIndex == -1 && comboBoxItems.Count > 0)
                 {
-                    Debug.WriteLine("UpdateSessionList: No playing session found. Selecting first available.");
+                    DebugLogger.Log("UpdateSessionList: No playing session found. Selecting first available.");
                     targetIndex = 0;
                 }
             }
 
             // Ставим SelectedIndex. Если targetIndex = -1, ничего не будет выбрано.
-            Debug.WriteLine($"UpdateSessionList: Final decision - Setting SelectedIndex to {targetIndex}");
+            DebugLogger.Log($"UpdateSessionList: Final decision - Setting SelectedIndex to {targetIndex}");
             SessionComboBox.SelectedIndex = targetIndex;
             
             // Вызываем SwitchToSession ЯВНО здесь, так как SelectionChanged будет проигнорирован из-за флага _isComboBoxUpdate.
             // Это гарантирует, что _currentSession установится правильно ДО вызова UpdateButtonStates в finally.
             if (targetIndex >= 0 && comboBoxItems.Count > targetIndex && comboBoxItems[targetIndex].Tag is GlobalSystemMediaTransportControlsSession sessionToSelect)
             {
-                Debug.WriteLine($"UpdateSessionList: Manually calling SwitchToSession for initially selected index {targetIndex} ({sessionToSelect.SourceAppUserModelId}) while _isComboBoxUpdate={_isComboBoxUpdate}");
+                DebugLogger.Log($"UpdateSessionList: Manually calling SwitchToSession for initially selected index {targetIndex} ({sessionToSelect.SourceAppUserModelId}) while _isComboBoxUpdate={_isComboBoxUpdate}");
                 SwitchToSession(sessionToSelect);
             }
             else if (targetIndex == -1) // Если ничего не выбрано (или список пуст), очистим сессию
             {
-                 Debug.WriteLine($"UpdateSessionList: Manually calling SwitchToSession(null) for index {targetIndex} while _isComboBoxUpdate={_isComboBoxUpdate}");
+                 DebugLogger.Log($"UpdateSessionList: Manually calling SwitchToSession(null) for index {targetIndex} while _isComboBoxUpdate={_isComboBoxUpdate}");
                  SwitchToSession(null);
             }
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Error updating session list: {ex}");
+            DebugLogger.Log($"Error updating session list", ex);
             UpdateStatusText("Error updating session list.");
             // Попытка очистить состояние при ошибке
              try {
@@ -452,14 +483,14 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                      if (_isRpcConnected) _client?.ClearPresence();
                  }
              } catch (Exception cleanupEx) {
-                 Debug.WriteLine($"Error during cleanup after session list update error: {cleanupEx}");
+                 DebugLogger.Log($"Error during cleanup after session list update error", cleanupEx);
              }
         }
         finally
         {
             _isComboBoxUpdate = false; // Снимаем флаг для ComboBox
             _isUpdatingSessionList = false; // Снимаем флаг блокировки
-            Debug.WriteLine("--- UpdateSessionList finished ---");
+            DebugLogger.Log("--- UpdateSessionList finished ---");
             UpdateButtonStates(); // Теперь этот вызов должен видеть актуальный _currentSession
         }
     }
@@ -512,7 +543,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             if (sender is DispatcherTimer timer)
             {
                 timer.Stop();
-                Debug.WriteLine("Debounce timer elapsed. Calling UpdatePresenceFromSession...");
+                DebugLogger.Log("Debounce timer elapsed. Calling UpdatePresenceFromSession...");
                 await UpdatePresenceFromSession();
             }
         };
@@ -524,14 +555,14 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
         _presenceUpdateDebounceTimer.Stop();
         _presenceUpdateDebounceTimer.Start();
-        Debug.WriteLine($"Requested presence update (debounced for {DebounceMilliseconds}ms)");
+        DebugLogger.Log($"Requested presence update (debounced for {DebounceMilliseconds}ms)");
     }
 
     private void MediaPropertiesChangedHandler(GlobalSystemMediaTransportControlsSession? sender, MediaPropertiesChangedEventArgs? args)
     {
         if (sender != null && _currentSession != null && sender.SourceAppUserModelId == _currentSession.SourceAppUserModelId)
         {
-            Debug.WriteLine($"MediaPropertiesChangedHandler: Properties changed for {sender.SourceAppUserModelId}");
+            DebugLogger.Log($"MediaPropertiesChangedHandler: Properties changed for {sender.SourceAppUserModelId}");
             RequestPresenceUpdateDebounced();
         }
     }
@@ -540,7 +571,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     {
         if (sender != null && _currentSession != null && sender.SourceAppUserModelId == _currentSession.SourceAppUserModelId)
         {
-            Debug.WriteLine($"PlaybackInfoChangedHandler: Playback info changed for {sender.SourceAppUserModelId}");
+            DebugLogger.Log($"PlaybackInfoChangedHandler: Playback info changed for {sender.SourceAppUserModelId}");
             RequestPresenceUpdateDebounced();
         }
     }
@@ -549,106 +580,55 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     {
         if (!_isRpcConnected || _client == null || !_client.IsInitialized || _mediaStateManager == null || _spotifyService == null)
         {
-            Debug.WriteLine($"UpdatePresenceFromSession skipped: Preconditions not met (RPC Connected: {_isRpcConnected}, Client Valid: {_client != null && _client.IsInitialized}, StateManager Valid: {_mediaStateManager != null}, SpotifyService Valid: {_spotifyService != null})");
+            DebugLogger.Log($"UpdatePresenceFromSession skipped: Preconditions not met (RPC Connected: {_isRpcConnected}, Client Valid: {_client != null && _client.IsInitialized}, StateManager Valid: {_mediaStateManager != null}, SpotifyService Valid: {_spotifyService != null})");
             return;
         }
 
         if (_currentSession == null)
         {
-            Debug.WriteLine("UpdatePresenceFromSession: Clearing presence because current session is null");
+            DebugLogger.Log("UpdatePresenceFromSession: Clearing presence because current session is null");
             _client.ClearPresence();
             UpdateStatusText("No media source selected or active.");
             return;
         }
 
-        Debug.WriteLine($"UpdatePresenceFromSession started for session: {_currentSession.SourceAppUserModelId}");
+        DebugLogger.Log($"UpdatePresenceFromSession started for session: {_currentSession.SourceAppUserModelId}");
 
         try
         {
-             // --- НОВАЯ ЛОГИКА С КЕШЕМ SPOTIFY --- 
-             CustomMediaRPC.Models.MediaState currentState = _mediaStateManager.CurrentState;
-             RichPresence? presenceToSend = null;
-
-            // Проверяем, можно ли вообще искать обложку (есть артист и трек)
-             bool canFetchArt = !string.IsNullOrWhiteSpace(currentState.Artist) && 
-                               !string.IsNullOrWhiteSpace(currentState.Title) && 
-                               currentState.Artist != Constants.Media.UNKNOWN_ARTIST &&
-                               currentState.Title != Constants.Media.UNKNOWN_TITLE;
-
-             if (canFetchArt && !_spotifyService.TryGetCachedAlbumArtInfo(currentState.Artist!, currentState.Title!, currentState.Album, out _))
-             {
-                // --- СЛУЧАЙ 1: Можно искать, но в кеше нет --- 
-                Debug.WriteLine($"UpdatePresenceFromSession: Spotify cache MISS for {currentState.Artist} - {currentState.Title}. Sending presence with default image and triggering background fetch.");
-                
-                // Строим базовый presence с дефолтной картинкой (нужно извлечь основную логику из BuildRichPresenceAsync или дублировать частично)
-                // Упрощенный вариант: Создаем базовый presence здесь
-                string detailsText = currentState.GetDisplayTitle();
-                string stateText = currentState.GetStatusText();
-                // Используем публичное свойство
-                Timestamps? timestamps = (currentState.Status == MediaPlaybackStatus.Playing && _mediaStateManager.CurrentTrackStartTime.HasValue) 
-                                       ? new Timestamps { Start = _mediaStateManager.CurrentTrackStartTime.Value } 
-                                       : null;
-
-                presenceToSend = new RichPresence
-                {
-                    Details = StringUtils.TruncateStringByBytesUtf8(detailsText, Constants.Media.MAX_PRESENCE_TEXT_LENGTH),
-                    State = StringUtils.TruncateStringByBytesUtf8(stateText, Constants.Media.MAX_PRESENCE_TEXT_LENGTH),
-                    Assets = new Assets
-                    {
-                        LargeImageKey = Constants.Media.DEFAULT_IMAGE_URL, // Дефолтная картинка
-                        LargeImageText = StringUtils.TruncateStringByBytesUtf8(currentState.Album ?? currentState.Title ?? string.Empty, Constants.Media.MAX_PRESENCE_TEXT_LENGTH)
-                    },
-                    Timestamps = timestamps
-                };
-
-                // Запускаем получение обложки в фоне (fire-and-forget)
-                _ = _spotifyService.GetAlbumArtInfoAsync(currentState.Artist!, currentState.Title!, currentState.Album);
-
-                 // Обновляем _lastSentPresence в MediaStateManager этим временным состоянием,
-                 // чтобы ShouldUpdatePresence не сработал ложно при следующем вызове, пока фон не отработал.
-                 _mediaStateManager.SetLastSentPresence(presenceToSend); 
-             }
-             else
-             {
-                // --- СЛУЧАЙ 2: Нельзя искать ИЛИ в кеше есть --- 
-                Debug.WriteLine($"UpdatePresenceFromSession: Spotify cache HIT or skipping lookup for {currentState.Artist} - {currentState.Title}. Building presence normally.");
-                 // Строим presence как обычно, вызывая BuildRichPresenceAsync,
-                 // который теперь либо возьмет из кеша, либо пропустит поиск, либо использует дефолтную картинку.
-                 presenceToSend = await _mediaStateManager.BuildRichPresenceAsync(_currentSession);
-             }
-             // --- КОНЕЦ НОВОЙ ЛОГИКИ ---
-
-            // RichPresence? newPresence = await _mediaStateManager.BuildRichPresenceAsync(_currentSession); // Старая строка
-            RichPresence? newPresence = presenceToSend; // Используем результат логики выше
+             // --- УПРОЩЕННАЯ ЛОГИКА --- 
+             // Всегда вызываем BuildRichPresenceAsync, он сам разберется с кешем Spotify
+             RichPresence? newPresence = await _mediaStateManager.BuildRichPresenceAsync(_currentSession); 
 
             if (newPresence == null)
             {
-                Debug.WriteLine("UpdatePresenceFromSession: BuildRichPresenceAsync returned null");
-                if (_mediaStateManager.CurrentState.IsUnknown)
+                DebugLogger.Log("UpdatePresenceFromSession: BuildRichPresenceAsync returned null");
+                // Если состояние неизвестно (например, только запустили и нет данных), чистим presence
+                if (_mediaStateManager.CurrentState.IsUnknown) 
                 {
+                    DebugLogger.Log("UpdatePresenceFromSession: Current state is Unknown, clearing presence.");
                     _client.ClearPresence();
                     UpdateStatusText("Waiting for media info...");
                 }
+                // Если не null, но состояние не Unknown (например, Stopped), то presence был построен, но может быть ShouldUpdatePresence вернет false
                 return;
             }
 
             if (_mediaStateManager.ShouldUpdatePresence(newPresence))
             {
-                Debug.WriteLine("Presence data changed. Calling _client.SetPresence...");
+                DebugLogger.Log("Presence data changed. Calling _client.SetPresence...");
                 _client.SetPresence(newPresence);
-                Debug.WriteLine("SetPresence called successfully");
-                
-                // Обновляем статус на главной странице
+                DebugLogger.Log("SetPresence called successfully");
                 UpdateStatusText($"{newPresence.Details} - {newPresence.State}");
             }
             else
             {
-                Debug.WriteLine("Presence data hasn't changed. Skipping SetPresence call");
+                DebugLogger.Log("Presence data hasn't changed. Skipping SetPresence call");
             }
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Error updating presence: {ex}");
+            DebugLogger.Log($"Error updating presence", ex);
             UpdateStatusText("Error updating presence.");
         }
     }
@@ -660,7 +640,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             if (StatusTextBlock != null)
             {
                 StatusTextBlock.Text = text;
-                Debug.WriteLine($"UI Status updated: {text}");
+                DebugLogger.Log($"UI Status updated: {text}");
             }
         });
     }
@@ -680,10 +660,10 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         var newSessionId = newSession?.SourceAppUserModelId ?? "null";
 
         if (previousSessionId == newSessionId) {
-            Debug.WriteLine($"SwitchToSession called. Current: {previousSessionId}, New: {newSessionId}. Session is the same.");
+            DebugLogger.Log($"SwitchToSession called. Current: {previousSessionId}, New: {newSessionId}. Session is the same.");
             if (_mediaStateManager?.SelectedSourceAppId != newSessionId)
             {
-                 Debug.WriteLine($"SwitchToSession [SYNC]: Session is same, but StateManager had different ID ('{_mediaStateManager?.SelectedSourceAppId}'). Syncing to '{newSessionId}'");
+                 DebugLogger.Log($"SwitchToSession [SYNC]: Session is same, but StateManager had different ID ('{_mediaStateManager?.SelectedSourceAppId}'). Syncing to '{newSessionId}'");
                  if (_mediaStateManager != null)
                  {
                     _mediaStateManager.SelectedSourceAppId = newSessionId;
@@ -693,11 +673,11 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             return;
         }
 
-        Debug.WriteLine($"SwitchToSession called. Current: {previousSessionId}, New: {newSessionId}. Switching...");
+        DebugLogger.Log($"SwitchToSession called. Current: {previousSessionId}, New: {newSessionId}. Switching...");
 
         if (_currentSession != null)
         {
-            Debug.WriteLine($"SwitchToSession: Unsubscribing from events for {previousSessionId}");
+            DebugLogger.Log($"SwitchToSession: Unsubscribing from events for {previousSessionId}");
             _currentSession.MediaPropertiesChanged -= MediaPropertiesChangedHandler;
             _currentSession.PlaybackInfoChanged -= PlaybackInfoChangedHandler;
         }
@@ -710,25 +690,25 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
         if (_currentSession != null)
         {
-            Debug.WriteLine($"SwitchToSession: Subscribing to events for {newSessionId}");
+            DebugLogger.Log($"SwitchToSession: Subscribing to events for {newSessionId}");
             _currentSession.MediaPropertiesChanged += MediaPropertiesChangedHandler;
             _currentSession.PlaybackInfoChanged += PlaybackInfoChangedHandler;
-            Debug.WriteLine($"SwitchToSession: Set StateManager.SelectedSourceAppId to {newSessionId}");
+            DebugLogger.Log($"SwitchToSession: Set StateManager.SelectedSourceAppId to {newSessionId}");
 
             if (_isRpcConnected)
             {
-                Debug.WriteLine("SwitchToSession: Requesting presence update for the new session...");
+                DebugLogger.Log("SwitchToSession: Requesting presence update for the new session...");
                 RequestPresenceUpdateDebounced();
             }
-            Debug.WriteLine($"Switched to session: {newSessionId}");
+            DebugLogger.Log($"Switched to session: {newSessionId}");
         }
         else // newSession is null
         {
-            Debug.WriteLine("SwitchToSession: Clearing current session (newSession is null)");
+            DebugLogger.Log("SwitchToSession: Clearing current session (newSession is null)");
             if (_isRpcConnected && _client != null && _client.IsInitialized)
             {
                 _client.ClearPresence();
-                 Debug.WriteLine("SwitchToSession: Cleared Discord presence.");
+                 DebugLogger.Log("SwitchToSession: Cleared Discord presence.");
             }
             UpdateStatusText("No media source selected or active.");
         }
@@ -738,26 +718,26 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     {
         if (_isComboBoxUpdate) // Игнорируем изменения во время заполнения списка
         {
-            Debug.WriteLine($"SessionComboBox_SelectionChanged skipped: _isComboBoxUpdate={_isComboBoxUpdate}");
+            DebugLogger.Log($"SessionComboBox_SelectionChanged skipped: _isComboBoxUpdate={_isComboBoxUpdate}");
             return;
         }
 
         var selectedItem = SessionComboBox.SelectedItem as ComboBoxItem;
-        Debug.WriteLine($"SessionComboBox_SelectionChanged triggered. Selected Item: '{selectedItem?.Content ?? "null"}', Index: {SessionComboBox.SelectedIndex}");
+        DebugLogger.Log($"SessionComboBox_SelectionChanged triggered. Selected Item: '{selectedItem?.Content ?? "null"}', Index: {SessionComboBox.SelectedIndex}");
 
         if (selectedItem?.Tag is GlobalSystemMediaTransportControlsSession selectedSession)
         {
-            Debug.WriteLine($"SessionComboBox_SelectionChanged: User selected session: {selectedSession.SourceAppUserModelId}");
+            DebugLogger.Log($"SessionComboBox_SelectionChanged: User selected session: {selectedSession.SourceAppUserModelId}");
             SwitchToSession(selectedSession); // Переключаемся на выбранную сессию
         }
         else if (SessionComboBox.SelectedIndex == -1 || selectedItem?.Content?.ToString() == "No media sources detected" || selectedItem?.Content?.ToString() == "Error loading sources")
         {
-            Debug.WriteLine($"SessionComboBox_SelectionChanged: Selected placeholder or invalid item. Clearing session.");
+            DebugLogger.Log($"SessionComboBox_SelectionChanged: Selected placeholder or invalid item. Clearing session.");
             SwitchToSession(null); // Очищаем сессию
         }
         else
         {
-            Debug.WriteLine($"SessionComboBox_SelectionChanged: Selected item has no valid session tag. Item: {selectedItem?.Content}. Doing nothing.");
+            DebugLogger.Log($"SessionComboBox_SelectionChanged: Selected item has no valid session tag. Item: {selectedItem?.Content}. Doing nothing.");
             // Ничего не делаем, если выбран некорректный элемент (маловероятно)
         }
 
@@ -766,28 +746,55 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
     private void ConnectButton_Click(object sender, RoutedEventArgs e)
     {
-        Debug.WriteLine("--- ConnectButton_Click called ---");
+        DebugLogger.Log("--- ConnectButton_Click called ---");
         InitializeDiscord();
     }
 
     private void DisconnectButton_Click(object sender, RoutedEventArgs e)
     {
-        Debug.WriteLine("--- DisconnectButton_Click called ---");
+        DebugLogger.Log("--- DisconnectButton_Click called ---");
         DisconnectDiscord();
     }
 
     private void DisconnectDiscord()
     {
-        Debug.WriteLine("--- DisconnectDiscord called ---");
-        try { Debug.WriteLine(Environment.StackTrace); } catch {}
+        _mediaStateManager?.CancelPreviousPresenceBuild(); // Отменяем любые активные запросы обложек
 
-        _client?.ClearPresence();
-        _client?.Dispose();
-        _client = null;
-        _isRpcConnected = false;
-        UpdateStatusText("Disconnected from Discord.");
-        UpdateButtonStates();
-        Debug.WriteLine("--- DisconnectDiscord finished ---");
+        if (_client != null) // Check if client exists before accessing IsInitialized
+        {
+            DebugLogger.Log("--- DisconnectDiscord called ---");
+            try 
+            { 
+                if (_client.IsInitialized) // Only Clear/Dispose if initialized
+                {
+                     DebugLogger.Log("Clearing presence and disposing client...");
+                    _client.ClearPresence();
+                    _client.Dispose();
+                }
+            }
+            catch (Exception ex)
+            {
+                 DebugLogger.Log($"Error during Discord client dispose: {ex.Message}");
+            }
+            finally
+            {
+                _client = null; // Set to null regardless of errors
+                _isRpcConnected = false; // Ensure state is updated
+                Dispatcher.InvokeAsync(() => // Ensure UI updates are on the UI thread
+                {
+                     UpdateStatusText("Disconnected from Discord.");
+                     UpdateButtonStates();
+                });
+                 DebugLogger.Log("--- DisconnectDiscord finished (client set to null, state updated) ---");
+            }
+        }
+        else
+        {
+             DebugLogger.Log("--- DisconnectDiscord called but client was already null ---");
+             // Ensure state is correct even if client was already null
+             _isRpcConnected = false;
+             Dispatcher.InvokeAsync(UpdateButtonStates);
+        }
     }
 
     private void UpdateButtonStates()
@@ -801,10 +808,11 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             ConnectButton.IsEnabled = canConnect;
             DisconnectButton.IsEnabled = canDisconnect;
             
-            // Блокируем выбор источника после подключения
+            // Блокируем выбор источника и настройки после подключения
             SessionComboBox.IsEnabled = !_isRpcConnected;
+            SettingsGroup.IsEnabled = !_isRpcConnected;
             
-            Debug.WriteLine($"UpdateButtonStates: sourceSelected={sourceSelected}, _isRpcConnected={_isRpcConnected}, canConnect={canConnect}, canDisconnect={canDisconnect}, SessionComboBox.IsEnabled={SessionComboBox.IsEnabled}");
+            DebugLogger.Log($"UpdateButtonStates: sourceSelected={sourceSelected}, _isRpcConnected={_isRpcConnected}, canConnect={canConnect}, canDisconnect={canDisconnect}, SessionComboBox.IsEnabled={SessionComboBox.IsEnabled}, SettingsGroup.IsEnabled={SettingsGroup.IsEnabled}");
         });
     }
 
@@ -818,7 +826,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             ? new SymbolIcon(SymbolRegular.WeatherMoon24) 
             : new SymbolIcon(SymbolRegular.WeatherSunny24);
             
-        Debug.WriteLine($"Theme changed to: {newTheme}");
+        DebugLogger.Log($"Theme changed to: {newTheme}");
     }
 
     private void DevelopersHyperlink_Click(object sender, RoutedEventArgs e)

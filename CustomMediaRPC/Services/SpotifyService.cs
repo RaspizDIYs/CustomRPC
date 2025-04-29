@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using CustomMediaRPC.Models; // Понадобится для AlbumArtInfo
 using CustomMediaRPC.Utils; // Понадобится для Constants
 using SpotifyAPI.Web; // Добавили через NuGet
+using System.Threading; // Добавлено для CancellationToken
 
 namespace CustomMediaRPC.Services
 {
@@ -13,21 +14,22 @@ namespace CustomMediaRPC.Services
 
     public class SpotifyService
     {
-        // ВНИМАНИЕ: Хранение ключей API прямо в коде не рекомендуется по соображениям безопасности.
-        // Лучше использовать конфигурационные файлы или переменные окружения.
-        private const string SpotifyClientId = "373a628bcfc04a2a908a82c3b7671304";
-        private const string SpotifyClientSecret = "750d08523d8b4b798145ae128f26bb55";
+        // Возвращаем хардкод ключей API
+        private const string SpotifyClientId = "373a628bcfc04a2a908a82c3b7671304"; // TODO: Вынести в настройки!
+        private const string SpotifyClientSecret = "750d08523d8b4b798145ae128f26bb55"; // TODO: Вынести в настройки!
 
+        private readonly AppSettings _settings;
         private SpotifyClient? _spotifyClient;
         private readonly ConcurrentDictionary<string, (AlbumArtInfo? Info, DateTime Expiry)> _cache;
         private static readonly TimeSpan _cacheDuration = TimeSpan.FromMinutes(Constants.LastFm.CACHE_DURATION_MINUTES); // Используем константу из LastFm для начала
         private static readonly TimeSpan _notFoundCacheDuration = TimeSpan.FromMinutes(15); // Как в LastFm
+        private SemaphoreSlim _clientInitSemaphore = new SemaphoreSlim(1, 1); // Для безопасной инициализации клиента
 
-        public SpotifyService()
+        public SpotifyService(AppSettings settings) // Добавили AppSettings
         {
+            _settings = settings;
             _cache = new ConcurrentDictionary<string, (AlbumArtInfo?, DateTime)>();
-            // Инициализация клиента будет чуть позже, при первом запросе или в конструкторе
-            Debug.WriteLine("SpotifyService initialized.");
+            DebugLogger.Log("SpotifyService initialized.");
         }
 
         // Новый метод для синхронной проверки кеша
@@ -46,41 +48,70 @@ namespace CustomMediaRPC.Services
 
             if (_cache.TryGetValue(cacheKey, out var cached) && cached.Expiry > DateTime.UtcNow)
             {
-                Debug.WriteLine($"SpotifyService Sync Cache HIT for key '{cacheKey}'. Info: {cached.Info?.ImageUrl ?? "null"}");
+                DebugLogger.Log($"SpotifyService Sync Cache HIT for key '{cacheKey}'. Info: {cached.Info?.ImageUrl ?? "null"}");
                 info = cached.Info;
                 return true;
             }
 
-            Debug.WriteLine($"SpotifyService Sync Cache MISS for key '{cacheKey}'.");
+            DebugLogger.Log($"SpotifyService Sync Cache MISS for key '{cacheKey}'.");
             return false;
         }
 
-        private async Task InitializeClientAsync()
+        private async Task InitializeClientAsync(CancellationToken cancellationToken = default) // Добавили CancellationToken
         {
-            if (_spotifyClient == null)
-            {
-                try
-                {
-                    var config = SpotifyClientConfig.CreateDefault();
-                    var request = new ClientCredentialsRequest(SpotifyClientId, SpotifyClientSecret);
-                    var response = await new OAuthClient(config).RequestToken(request);
+            if (_spotifyClient != null) return; // Уже инициализирован
 
-                    _spotifyClient = new SpotifyClient(config.WithToken(response.AccessToken));
-                    Debug.WriteLine("SpotifyService: SpotifyClient initialized successfully.");
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"SpotifyService Error: Failed to initialize SpotifyClient: {ex.Message}");
-                    _spotifyClient = null; // Убедимся, что клиент не используется, если инициализация не удалась
-                }
+            // Проверяем наличие ключей (теперь используем константы)
+            if (string.IsNullOrWhiteSpace(SpotifyClientId) || string.IsNullOrWhiteSpace(SpotifyClientSecret))
+            {
+                DebugLogger.Log("SpotifyService Error: Hardcoded Spotify Client ID or Secret is missing.");
+                return;
+            }
+
+            await _clientInitSemaphore.WaitAsync(cancellationToken); // Ждем семафор
+            try
+            {
+                if (_spotifyClient != null) return; // Еще одна проверка внутри лока
+
+                DebugLogger.Log("SpotifyService: Initializing SpotifyClient...");
+                var config = SpotifyClientConfig.CreateDefault();
+                // Используем константы вместо _settings
+                var request = new ClientCredentialsRequest(SpotifyClientId, SpotifyClientSecret);
+                
+                cancellationToken.ThrowIfCancellationRequested(); // Проверка перед запросом
+                
+                // OAuthClient не поддерживает CancellationToken напрямую в RequestToken
+                // Используем стандартный HttpClient с таймаутом или оберткой Task.Run, если нужно строгое прерывание
+                // Но чаще всего достаточно проверок до и после
+                var response = await new OAuthClient(config).RequestToken(request);
+                // TODO: Add timeout or CancellationToken to OAuthClient request if library supports it or via HttpClient
+                
+                cancellationToken.ThrowIfCancellationRequested(); // Проверка после запроса
+
+                _spotifyClient = new SpotifyClient(config.WithToken(response.AccessToken));
+                DebugLogger.Log("SpotifyService: SpotifyClient initialized successfully.");
+            }
+            catch (OperationCanceledException)
+            {
+                DebugLogger.Log("SpotifyService: SpotifyClient initialization cancelled.");
+                _spotifyClient = null;
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Log($"SpotifyService Error: Failed to initialize SpotifyClient: {ex.Message}");
+                _spotifyClient = null; // Убедимся, что клиент не используется, если инициализация не удалась
+            }
+            finally
+            {
+                 _clientInitSemaphore.Release(); // Освобождаем семафор
             }
         }
 
-        public async Task<AlbumArtInfo?> GetAlbumArtInfoAsync(string artist, string track, string? album)
+        public async Task<AlbumArtInfo?> GetAlbumArtInfoAsync(string artist, string track, string? album, CancellationToken cancellationToken = default) // Добавили CancellationToken
         {
              if (string.IsNullOrWhiteSpace(artist) || string.IsNullOrWhiteSpace(track))
             {
-                Debug.WriteLine("SpotifyService Skip: Artist or track is empty.");
+                DebugLogger.Log("SpotifyService Skip: Artist or track is empty.");
                 return null;
             }
             
@@ -94,16 +125,18 @@ namespace CustomMediaRPC.Services
             // Проверяем кеш еще раз перед async вызовом (на случай если между TryGet и этим вызовом что-то попало в кеш)
             if (_cache.TryGetValue(cacheKey, out var cached) && cached.Expiry > DateTime.UtcNow)
             {
-                Debug.WriteLine($"SpotifyService Async Cache HIT for key '{cacheKey}'. Returning cached info: {cached.Info?.ImageUrl ?? "null"}");
+                DebugLogger.Log($"SpotifyService Async Cache HIT for key '{cacheKey}'. Returning cached info: {cached.Info?.ImageUrl ?? "null"}");
                 return cached.Info;
             }
 
-            Debug.WriteLine($"SpotifyService Async Cache MISS for key '{cacheKey}'. Performing API lookup.");
+            DebugLogger.Log($"SpotifyService Async Cache MISS for key '{cacheKey}'. Performing API lookup.");
+            
+            cancellationToken.ThrowIfCancellationRequested(); // Проверка перед инициализацией
 
-            await InitializeClientAsync(); // Убедимся, что клиент инициализирован
+            await InitializeClientAsync(cancellationToken); // Передаем токен
             if (_spotifyClient == null)
             {
-                 Debug.WriteLine("SpotifyService Error: Spotify client is not initialized. Cannot perform search.");
+                 DebugLogger.Log("SpotifyService Error: Spotify client is not initialized. Cannot perform search.");
                  return null; // Не можем выполнить поиск без клиента
             }
 
@@ -115,7 +148,7 @@ namespace CustomMediaRPC.Services
                 // 2. Если нашли трек, взять обложку его альбома.
                 // 3. Если `album` задан, можно попробовать найти альбом напрямую по `artist` и `album`.
 
-                Debug.WriteLine($"SpotifyService: Performing search for Artist: '{artist}', Track: '{track}', Album: '{album ?? "N/A"}'");
+                DebugLogger.Log($"SpotifyService: Performing search for Artist: '{artist}', Track: '{track}', Album: '{album ?? "N/A"}'");
                 
                 // Примерный плейсхолдер поиска (нужно доработать)
                  SearchRequest searchRequest;
@@ -130,7 +163,7 @@ namespace CustomMediaRPC.Services
                      searchRequest = new SearchRequest(SearchRequest.Types.Track, $"artist:{artist} track:{track}");
                  }
 
-                 var searchResponse = await _spotifyClient.Search.Item(searchRequest);
+                 var searchResponse = await _spotifyClient.Search.Item(searchRequest, cancellationToken);
 
                 // Обработка результатов поиска (упрощенная)
                  string? imageUrl = null;
@@ -145,7 +178,7 @@ namespace CustomMediaRPC.Services
                          imageUrl = foundAlbum.Images[0].Url; 
                      }
                      foundAlbumTitle = foundAlbum.Name;
-                     Debug.WriteLine($"SpotifyService: Found album '{foundAlbumTitle}' directly. Image: {imageUrl ?? "none"}");
+                     DebugLogger.Log($"SpotifyService: Found album '{foundAlbumTitle}' directly. Image: {imageUrl ?? "none"}");
                  }
                  else if (searchResponse.Tracks?.Items != null && searchResponse.Tracks.Items.Count > 0)
                  {
@@ -156,11 +189,11 @@ namespace CustomMediaRPC.Services
                          imageUrl = foundTrack.Album.Images[0].Url; 
                      }
                      foundAlbumTitle = foundTrack.Album?.Name;
-                     Debug.WriteLine($"SpotifyService: Found track '{foundTrack.Name}', album '{foundAlbumTitle}'. Image: {imageUrl ?? "none"}");
+                     DebugLogger.Log($"SpotifyService: Found track '{foundTrack.Name}', album '{foundAlbumTitle}'. Image: {imageUrl ?? "none"}");
                  }
                  else
                  {
-                     Debug.WriteLine($"SpotifyService: No results found for the search query.");
+                     DebugLogger.Log($"SpotifyService: No results found for the search query.");
                  }
 
                  if (!string.IsNullOrWhiteSpace(imageUrl))
@@ -178,20 +211,25 @@ namespace CustomMediaRPC.Services
                  }
 
             }
+            catch (OperationCanceledException)
+            {
+                DebugLogger.Log("SpotifyService: API search cancelled.");
+                result = null;
+            }
             catch (APIException ex)
             {
-                 Debug.WriteLine($"SpotifyService API Error during search: {ex.Message}");
+                 DebugLogger.Log($"SpotifyService API Error during search: {ex.Message}");
                  // Возможно, токен истек? Попробуем обновить (но базовая Client Credentials Flow обычно долгоживущая)
                  if (ex.Response?.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                  {
-                     Debug.WriteLine("SpotifyService: Unauthorized error, possibly expired token. Clearing client for reinitialization on next call.");
+                     DebugLogger.Log("SpotifyService: Unauthorized error, possibly expired token. Clearing client for reinitialization on next call.");
                      _spotifyClient = null; // Сбросим клиента, чтобы пересоздать при след. вызове
                  }
                  result = null;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"SpotifyService Error during API lookup: {ex.Message}");
+                DebugLogger.Log($"SpotifyService Error during API lookup: {ex.Message}");
                 result = null;
             }
 
@@ -201,7 +239,7 @@ namespace CustomMediaRPC.Services
                 : _notFoundCacheDuration; 
             var expiryTime = DateTime.UtcNow.Add(cacheDuration);
             _cache[cacheKey] = (result, expiryTime);
-            Debug.WriteLine($"SpotifyService Cached result for key '{cacheKey}' with expiry {expiryTime}. Result: {result?.ImageUrl ?? "null"}, Album: {result?.AlbumTitle ?? "null"}");
+            DebugLogger.Log($"SpotifyService Cached result for key '{cacheKey}' with expiry {expiryTime}. Result: {result?.ImageUrl ?? "null"}, Album: {result?.AlbumTitle ?? "null"}");
 
             return result;
         }

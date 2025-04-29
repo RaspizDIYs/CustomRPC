@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Threading.Tasks;
 using System.Windows;
+using CustomMediaRPC.Models;
+using CustomMediaRPC.Services;
 using CustomMediaRPC.Views;
 using Velopack;
 using Velopack.Sources;
@@ -13,6 +15,7 @@ namespace CustomMediaRPC;
 public partial class App : Application
 {
     public static UpdateManager? UpdateManager { get; private set; }
+    public static SettingsService SettingsService { get; private set; } = new();
 
     public App()
     {
@@ -31,6 +34,10 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // Загружаем настройки
+        await SettingsService.LoadSettingsAsync();
+        SettingsService.RegisterSettingsSaveOnPropertyChange();
 
         try
         {
@@ -52,7 +59,8 @@ public partial class App : Application
             Console.WriteLine($"Ошибка инициализации UpdateManager или проверки обновлений: {ex.Message}");
         }
 
-        var mainWindow = new Views.MainWindow();
+        // Передаем настройки в MainWindow
+        var mainWindow = new Views.MainWindow(SettingsService.CurrentSettings);
         mainWindow.Show();
     }
 

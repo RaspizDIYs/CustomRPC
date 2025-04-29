@@ -5,12 +5,14 @@ using DiscordRPC;
 using System.Diagnostics;
 using CustomMediaRPC.Models;
 using CustomMediaRPC.Utils;
+using System.Threading;
 
 namespace CustomMediaRPC.Services;
 
 public class MediaStateManager
 {
     private readonly SpotifyService _spotifyService;
+    private readonly AppSettings _settings;
     private MediaState _currentState;
     private string? _selectedSourceAppId;
     private DateTime _lastPresenceUpdateTime = DateTime.MinValue;
@@ -18,15 +20,17 @@ public class MediaStateManager
     private readonly TimeSpan _presenceUpdateThrottle = TimeSpan.FromMilliseconds(1000);
     private DateTime _lastStateChangeTime = DateTime.MinValue;
     private DateTime? _currentTrackStartTime;
+    private CancellationTokenSource? _presenceBuildCts;
 
     // Делаем публичное свойство для доступа к времени старта трека
     public DateTime? CurrentTrackStartTime => _currentTrackStartTime;
 
-    public MediaStateManager(SpotifyService spotifyService)
+    public MediaStateManager(SpotifyService spotifyService, AppSettings settings)
     {
         _spotifyService = spotifyService ?? throw new ArgumentNullException(nameof(spotifyService));
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _currentState = new MediaState();
-        Debug.WriteLine($"MediaStateManager initialized with SpotifyService: {spotifyService.GetHashCode()}");
+        DebugLogger.Log($"MediaStateManager initialized with SpotifyService: {spotifyService.GetHashCode()}");
     }
 
     public string? SelectedSourceAppId
@@ -36,14 +40,15 @@ public class MediaStateManager
         {
             if (_selectedSourceAppId != value)
             {
-                Debug.WriteLine($"SelectedSourceAppId changing from '{_selectedSourceAppId}' to '{value}'");
+                DebugLogger.Log($"SelectedSourceAppId changing from '{_selectedSourceAppId}' to '{value}'");
                 _selectedSourceAppId = value;
                 // Сбрасываем состояние при смене источника
                 _currentState = new MediaState { SourceAppId = value };
                 _lastSentPresence = null;
                 _lastPresenceUpdateTime = DateTime.MinValue;
                 _lastStateChangeTime = DateTime.MinValue;
-                Debug.WriteLine($"State reset after source change. New state: {_currentState}");
+                CancelPreviousPresenceBuild();
+                DebugLogger.Log($"State reset after source change. New state: {_currentState}");
             }
         }
     }
@@ -52,20 +57,24 @@ public class MediaStateManager
 
     public async Task<RichPresence?> BuildRichPresenceAsync(GlobalSystemMediaTransportControlsSession session)
     {
+        CancelPreviousPresenceBuild();
+        _presenceBuildCts = new CancellationTokenSource();
+        var cancellationToken = _presenceBuildCts.Token;
+        
         try
         {
-            Debug.WriteLine($"BuildRichPresenceAsync called for session: {session.SourceAppUserModelId}");
+            DebugLogger.Log($"BuildRichPresenceAsync called for session: {session.SourceAppUserModelId}");
             var playbackInfo = session.GetPlaybackInfo();
             var mediaProperties = await session.TryGetMediaPropertiesAsync();
 
             if (mediaProperties == null)
             {
-                Debug.WriteLine("BuildRichPresenceAsync: MediaProperties is null");
+                DebugLogger.Log("BuildRichPresenceAsync: MediaProperties is null");
                 return null;
             }
 
-            Debug.WriteLine($"BuildRichPresenceAsync: MediaProperties - Title: '{mediaProperties.Title}', Artist: '{mediaProperties.Artist}', Album: '{mediaProperties.AlbumTitle}'");
-            Debug.WriteLine($"BuildRichPresenceAsync: PlaybackInfo - Status: {playbackInfo?.PlaybackStatus}");
+            DebugLogger.Log($"BuildRichPresenceAsync: MediaProperties - Title: '{mediaProperties.Title}', Artist: '{mediaProperties.Artist}', Album: '{mediaProperties.AlbumTitle}'");
+            DebugLogger.Log($"BuildRichPresenceAsync: PlaybackInfo - Status: {playbackInfo?.PlaybackStatus}");
 
             var newState = new MediaState
             {
@@ -124,19 +133,26 @@ public class MediaStateManager
             // Строим RichPresence на основе *актуального* _currentState
             string detailsText = _currentState.GetDisplayTitle();
             string stateText = _currentState.GetStatusText();
-            string largeImageUrl = Constants.Media.DEFAULT_IMAGE_URL;
+            string largeImageUrl = GetDefaultImageUrl();
             string largeImageText = _currentState.Album ?? _currentState.Title ?? string.Empty;
 
-            // Пытаемся получить информацию об обложке
-            if (!string.IsNullOrWhiteSpace(_currentState.Artist) && 
+            // Пытаемся получить информацию об обложке из Spotify, если включено
+            if (_settings.LoadSpotifyCover && 
+                !string.IsNullOrWhiteSpace(_currentState.Artist) && 
                 !string.IsNullOrWhiteSpace(_currentState.Title) && 
                 _currentState.Artist != Constants.Media.UNKNOWN_ARTIST &&
                 _currentState.Title != Constants.Media.UNKNOWN_TITLE)
             {
-                 Debug.WriteLine($"BuildRichPresenceAsync: Attempting to fetch album art (likely from cache or direct call) for Artist='{_currentState.Artist}', Track='{_currentState.Title}', Album='{_currentState.Album ?? "N/A"}'");
-                 // Вызываем метод SpotifyService
-                var albumArtInfo = await _spotifyService.GetAlbumArtInfoAsync(_currentState.Artist, _currentState.Title, _currentState.Album);
+                 Debug.WriteLine($"BuildRichPresenceAsync: Attempting to fetch album art from Spotify for Artist='{_currentState.Artist}', Track='{_currentState.Title}', Album='{_currentState.Album ?? "N/A"}'");
+                 
+                 cancellationToken.ThrowIfCancellationRequested();
+                 var albumArtInfo = await _spotifyService.GetAlbumArtInfoAsync(_currentState.Artist, _currentState.Title, _currentState.Album, cancellationToken);
                 
+                 if (cancellationToken.IsCancellationRequested) {
+                    Debug.WriteLine("BuildRichPresenceAsync: Spotify fetch cancelled after call.");
+                    return null;
+                 }
+
                 if (!string.IsNullOrEmpty(albumArtInfo?.ImageUrl))
                 {
                     largeImageUrl = albumArtInfo.ImageUrl; 
@@ -145,21 +161,25 @@ public class MediaStateManager
                 }
                 else
                 {
+                    // Если Spotify включен, но не нашел картинку, используем дефолт (custom или hardcoded)
+                    // largeImageUrl уже содержит результат GetDefaultImageUrl()
                     if (albumArtInfo?.AlbumTitle != null)
                     {
                          largeImageText = albumArtInfo.AlbumTitle; 
-                        Debug.WriteLine($"BuildRichPresenceAsync: Spotify found album info ('{albumArtInfo.AlbumTitle}') but no suitable image URL.");
+                        Debug.WriteLine($"BuildRichPresenceAsync: Spotify found album info ('{albumArtInfo.AlbumTitle}') but no suitable image URL. Using default image.");
                     }
                     else
                     {   
                         largeImageText = _currentState.Album ?? _currentState.Title ?? string.Empty; 
-                        Debug.WriteLine("BuildRichPresenceAsync: No album art or info found via Spotify.");
+                        Debug.WriteLine("BuildRichPresenceAsync: No album art or info found via Spotify. Using default image.");
                     }
                 }
             }
             else
             {
-                 Debug.WriteLine($"BuildRichPresenceAsync: Skipping Spotify lookup (Artist or Title is missing/unknown).");
+                 Debug.WriteLine($"BuildRichPresenceAsync: Skipping Spotify lookup (disabled in settings or Artist/Title is missing/unknown). Using default image.");
+                 // largeImageUrl уже содержит результат GetDefaultImageUrl()
+                 largeImageText = _currentState.Album ?? _currentState.Title ?? string.Empty;
             }
 
             // --- Проверка длины largeImageText --- 
@@ -217,12 +237,23 @@ public class MediaStateManager
             };
 
             Debug.WriteLine($"BuildRichPresenceAsync: Created presence - Details: '{safeDetails}', State: '{safeState}', ImageKey: '{largeImageUrl}', ImageText: '{safeLargeImageText}'");
+            Debug.WriteLine($"BuildRichPresenceAsync: Successfully built new presence: {presence}");
             return presence;
+        }
+        catch (OperationCanceledException)
+        {
+            Debug.WriteLine("BuildRichPresenceAsync: Operation was cancelled.");
+            return null;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Error building RichPresence: {ex}");
+            Debug.WriteLine($"BuildRichPresenceAsync Error: {ex.Message}");
             return null;
+        }
+        finally
+        {
+             // Не сбрасываем CTS здесь, чтобы IsCancellationRequested работала
+             // Он сбросится при следующем вызове BuildRichPresenceAsync или при Disconnect
         }
     }
 
@@ -249,38 +280,56 @@ public class MediaStateManager
 
         Debug.WriteLine($"ShouldUpdatePresence: Presence has changed or needs update. Throttled: {now - _lastPresenceUpdateTime < _presenceUpdateThrottle}. Old: {_lastSentPresence?.Details ?? "null"}, New: {newPresence.Details}");
         _lastPresenceUpdateTime = now;
-        _lastSentPresence = newPresence; // Обновляем кэш ПОСЛЕ принятия решения об отправке
+        _lastSentPresence = newPresence;
         return true;
-    }
-
-    // Новый метод для установки последнего отправленного presence извне
-    public void SetLastSentPresence(RichPresence? presence)
-    {
-        _lastSentPresence = presence;
-        Debug.WriteLine($"SetLastSentPresence explicitly set. Details: {presence?.Details ?? "null"}");
     }
 
     private bool AreRichPresenceEqual(RichPresence? p1, RichPresence? p2)
     {
-        if (p1 == null && p2 == null) return true;
-        if (p1 == null || p2 == null) return false;
+        // Базовые проверки на null
+        if (ReferenceEquals(p1, p2)) { DebugLogger.Log("AreRichPresenceEqual: Same instance."); return true; } // Оптимизация: одна и та же ссылка
+        if (p1 is null || p2 is null) { DebugLogger.Log($"AreRichPresenceEqual: One is null (p1: {p1 == null}, p2: {p2 == null})."); return false; } 
 
-        if (p1.Details != p2.Details || p1.State != p2.State) return false;
+        bool detailsEqual = p1.Details == p2.Details;
+        if (!detailsEqual) { DebugLogger.Log($"AreRichPresenceEqual: Details differ ('{p1.Details}' != '{p2.Details}')."); return false; }
 
+        bool stateEqual = p1.State == p2.State;
+        if (!stateEqual) { DebugLogger.Log($"AreRichPresenceEqual: State differ ('{p1.State}' != '{p2.State}')."); return false; }
+
+        // Сравнение Assets
         var a1 = p1.Assets;
         var a2 = p2.Assets;
-        if (a1 == null && a2 == null) return true;
-        if (a1 == null || a2 == null) return false;
-        if (a1.LargeImageKey != a2.LargeImageKey || a1.LargeImageText != a2.LargeImageText) return false;
+        bool assetsEqual = false;
+        if (ReferenceEquals(a1, a2)) { assetsEqual = true; }
+        else if (a1 is null || a2 is null) { assetsEqual = false; }
+        else { assetsEqual = a1.LargeImageKey == a2.LargeImageKey && a1.LargeImageText == a2.LargeImageText; }
         
-        // --- Сравнение Timestamps --- 
+        if (!assetsEqual) 
+        { 
+            string a1Str = a1 == null ? "null" : $"LKey='{a1.LargeImageKey}', LText='{a1.LargeImageText}'";
+            string a2Str = a2 == null ? "null" : $"LKey='{a2.LargeImageKey}', LText='{a2.LargeImageText}'";
+            DebugLogger.Log($"AreRichPresenceEqual: Assets differ ({a1Str} != {a2Str})."); 
+            return false; 
+        }
+        
+        // Сравнение Timestamps
         var t1 = p1.Timestamps;
         var t2 = p2.Timestamps;
-        if (t1 == null && t2 == null) return true; // Оба null - равны
-        if (t1 == null || t2 == null) return false; // Один null, другой нет - не равны
-        if (t1.Start != t2.Start || t1.End != t2.End) return false; // Сравниваем значения Start и End
-        // ----------------------------
+        bool timestampsEqual = false;
+        if (ReferenceEquals(t1, t2)) { timestampsEqual = true; } // Оба null или одна ссылка
+        else if (t1 is null || t2 is null) { timestampsEqual = false; } // Один null, другой нет
+        else { timestampsEqual = t1.Start == t2.Start && t1.End == t2.End; } // Сравниваем значения
 
+        if (!timestampsEqual) 
+        { 
+            string t1Str = t1 == null ? "null" : $"Start={t1.Start?.ToString() ?? "null"}, End={t1.End?.ToString() ?? "null"}";
+            string t2Str = t2 == null ? "null" : $"Start={t2.Start?.ToString() ?? "null"}, End={t2.End?.ToString() ?? "null"}";
+            DebugLogger.Log($"AreRichPresenceEqual: Timestamps differ ({t1Str} != {t2Str})."); 
+            return false; 
+        }
+
+        // Если все проверки пройдены
+        DebugLogger.Log("AreRichPresenceEqual: All compared properties are equal.");
         return true;
     }
 
@@ -294,5 +343,42 @@ public class MediaStateManager
                s1.Album == s2.Album &&
                s1.Status == s2.Status &&
                s1.SourceAppId == s2.SourceAppId;
+    }
+
+    public void CancelPreviousPresenceBuild()
+    {
+        if (_presenceBuildCts != null)
+        {
+            Debug.WriteLine("MediaStateManager: Cancelling previous presence build task.");
+            _presenceBuildCts.Cancel();
+            _presenceBuildCts.Dispose();
+            _presenceBuildCts = null;
+        }
+    }
+
+    private string GetDefaultImageUrl()
+    {
+        if (_settings.UseCustomDefaultCover && IsValidImageUrl(_settings.CustomDefaultCoverUrl))
+        {
+             Debug.WriteLine($"Using custom default cover URL: {_settings.CustomDefaultCoverUrl}");
+            return _settings.CustomDefaultCoverUrl;
+        }
+         Debug.WriteLine($"Using hardcoded default cover URL: {Constants.Media.DEFAULT_IMAGE_URL}");
+        return Constants.Media.DEFAULT_IMAGE_URL;
+    }
+
+    private bool IsValidImageUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return false;
+        // Убираем проверку на расширения, достаточно http/https
+        return (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || 
+                url.StartsWith("https://", StringComparison.OrdinalIgnoreCase));
+    }
+
+    // ВОССТАНОВЛЕННЫЙ метод для сброса кэша извне (нужен для реконнекта)
+    public void SetLastSentPresence(RichPresence? presence)
+    {
+        _lastSentPresence = presence;
+        DebugLogger.Log($"SetLastSentPresence explicitly set. Details: {presence?.Details ?? "null"}");
     }
 } 
