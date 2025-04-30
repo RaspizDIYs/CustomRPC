@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>favicon.ico</ApplicationIcon>
-    <Version>1.0.9</Version>
+    <Version>1.0.10</Version>
     <Authors>Mejaikin</Authors>
     <Description>Отображает медиа-статус из Windows в Discord Rich Presence</Description>
     <Product>MediaToRPC</Product>
