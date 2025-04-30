@@ -17,7 +17,6 @@
     <Resource Include="favicon.ico" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="DiscordRichPresence" Version="1.2.1.24" />
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.1" />
     <!-- <PackageReference Include="FluentWPF" Version="0.10.2" /> -->
     <!-- <PackageReference Include="MahApps.Metro" Version="2.4.10" /> -->
@@ -49,5 +48,10 @@
       <XamlRuntime>Wpf</XamlRuntime>
       <SubType>Designer</SubType>
     </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="DiscordRPC">
+      <HintPath>Libs\DiscordRPC.dll</HintPath>
+    </Reference>
   </ItemGroup>
 </Project>

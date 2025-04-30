@@ -228,6 +228,7 @@ public class MediaStateManager
             {
                 Details = safeDetails,
                 State = safeState,
+                Type = ActivityType.Listening,
                 Assets = new Assets
                 {
                     LargeImageKey = largeImageUrl,
