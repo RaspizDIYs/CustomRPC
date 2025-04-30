@@ -21,11 +21,7 @@ public class MediaStateManager
     private RichPresence? _lastSentPresence;
     private readonly TimeSpan _presenceUpdateThrottle = TimeSpan.FromMilliseconds(1000);
     private DateTime _lastStateChangeTime = DateTime.MinValue;
-    private DateTime? _currentTrackStartTime;
     private CancellationTokenSource? _presenceBuildCts;
-
-    // Делаем публичное свойство для доступа к времени старта трека
-    public DateTime? CurrentTrackStartTime => _currentTrackStartTime;
 
     // Список выбранных сайтов для кнопок (получаем извне)
     public List<string> SelectedLinkSites { get; set; } = new List<string>();
@@ -113,16 +109,16 @@ public class MediaStateManager
                 _lastStateChangeTime = now;
                 
                 // --- Управление временем начала трека ---
-                if (_currentState.Status == MediaPlaybackStatus.Playing)
-                {
-                    _currentTrackStartTime = now; // Запоминаем время начала
-                    Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Track started playing. StartTime set to {_currentTrackStartTime}");
-                }
-                else
-                {
-                    _currentTrackStartTime = null; // Сбрасываем время, если не играет
-                    Debug.WriteLine("[BUILD {stopwatch.ElapsedMilliseconds}ms] Track is not playing. StartTime reset.");
-                }
+                // if (_currentState.Status == MediaPlaybackStatus.Playing)
+                // {
+                //     _currentTrackStartTime = now; // Запоминаем время начала
+                //     Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Track started playing. StartTime set to {_currentTrackStartTime}");
+                // }
+                // else
+                // {
+                //     _currentTrackStartTime = null; // Сбрасываем время, если не играет
+                //     Debug.WriteLine("[BUILD {stopwatch.ElapsedMilliseconds}ms] Track is not playing. StartTime reset.");
+                // }
                 // ----------------------------------------
             }
             else
@@ -238,35 +234,33 @@ public class MediaStateManager
             string safeState = StringUtils.TruncateStringByBytesUtf8(stateText, Constants.Media.MAX_PRESENCE_TEXT_LENGTH);
             string safeLargeImageText = StringUtils.TruncateStringByBytesUtf8(largeImageText, Constants.Media.MAX_PRESENCE_TEXT_LENGTH);
 
-            // --- Создание Timestamps ---
+            // --- Новая логика создания Timestamps на основе TimelineProperties ---
             Timestamps? timestamps = null;
-            if (_currentState.Status == MediaPlaybackStatus.Playing && _currentTrackStartTime.HasValue)
+            var timelineProperties = session.GetTimelineProperties();
+
+            if (playbackInfo?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing && timelineProperties != null)
             {
-                var timelineProperties = session.GetTimelineProperties();
-                if (timelineProperties != null && timelineProperties.EndTime > TimeSpan.Zero)
+                var position = timelineProperties.Position;
+                var startTimeForDiscord = now - position;
+                DateTime? endTimeForDiscord = null;
+
+                if (timelineProperties.EndTime > TimeSpan.Zero)
                 {
-                    // Рассчитываем время окончания трека
-                    var duration = timelineProperties.EndTime;
-                    var endTimeUtc = _currentTrackStartTime.Value.Add(duration);
-                    timestamps = new Timestamps
-                    {
-                        Start = _currentTrackStartTime.Value,
-                        End = endTimeUtc
-                    };
-                    Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Setting timestamps Start={timestamps.Start}, End={timestamps.End} (Duration: {duration})");
+                    endTimeForDiscord = startTimeForDiscord + timelineProperties.EndTime;
                 }
-                else
+
+                timestamps = new Timestamps
                 {
-                    // Если длительность неизвестна, ставим только время начала
-                    timestamps = new Timestamps { Start = _currentTrackStartTime.Value };
-                    Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Setting timestamp Start={timestamps.Start} (End time unavailable)");
-                }
+                    Start = startTimeForDiscord,
+                    End = endTimeForDiscord 
+                };
+                DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Setting timestamps based on SMTC: Position={position}, Calculated Start={startTimeForDiscord}, Calculated End={endTimeForDiscord?.ToString() ?? "null"}");
             }
             else
             {
-                 Debug.WriteLine("[BUILD {stopwatch.ElapsedMilliseconds}ms] Not setting timestamps (not playing or startTime is null).");
+                 DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Not setting timestamps (Not playing or timeline properties unavailable). PlaybackStatus: {playbackInfo?.PlaybackStatus}");
             }
-            // ---------------------------
+            // -----------------------------------------------------------------
 
             DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Timestamps created/checked.");
 

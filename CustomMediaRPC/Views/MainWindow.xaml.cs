@@ -1144,7 +1144,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         // ... и т.д.
     }
 
-    private async void LoadAppSettings()
+    private void LoadAppSettings()
     {
         // ... existing code ...
     }
