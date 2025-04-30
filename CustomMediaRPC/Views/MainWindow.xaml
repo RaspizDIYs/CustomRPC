@@ -58,15 +58,23 @@
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="5,5,0,5">
                     <ui:Button x:Name="ConnectButton" Content="Connect" Width="100" Margin="0,0,5,0" Click="ConnectButton_Click" Appearance="Primary" IsEnabled="False"/>
-                    <ui:Button x:Name="DisconnectButton" Content="Disconnect" Width="100" Click="DisconnectButton_Click" IsEnabled="False"/>
+                    <ui:Button x:Name="DisconnectButton" Content="Disconnect" Width="100" Margin="0,0,5,0" Click="DisconnectButton_Click" IsEnabled="False"/>
+                    <ui:Button x:Name="SettingsButton"
+                               Icon="{ui:SymbolIcon Settings24}"
+                               Click="SettingsButton_Click" 
+                               Appearance="Transparent"
+                               BorderThickness="0"
+                               Background="Transparent"
+                               ToolTip="Настройки"
+                               Margin="5,0,5,0"/>
                     <ui:Button x:Name="ThemeCycleButton" 
-                               Icon="WeatherMoon24" 
+                               Icon="{ui:SymbolIcon WeatherMoon24}"
                                Click="ThemeCycleButton_Click" 
                                Appearance="Transparent" 
                                BorderThickness="0"
                                Background="Transparent"
                                ToolTip="Сменить тему"
-                               Margin="130,0,0,0"/>
+                               Margin="0,0,0,0"/>
                 </StackPanel>
 
                 <!-- Настройки обложек: Убираем GroupBox, оставляем StackPanel -->
@@ -74,7 +82,7 @@
                     <!-- Новый общий чекбокс -->
                     <CheckBox x:Name="EnableCoverArtCheckBox"
                               Content="Load album art"
-                              IsChecked="{Binding Settings.EnableCoverArtFetching, Mode=TwoWay}"
+                              IsChecked="{Binding CurrentAppSettings.EnableCoverArtFetching, Mode=TwoWay}"
                               Margin="0,5,0,0"/>
 
                     <!-- Новый ComboBox для выбора источника -->
@@ -82,7 +90,7 @@
                               Width="330"
                               Margin="20,5,0,5" 
                               IsEnabled="{Binding IsChecked, ElementName=EnableCoverArtCheckBox}" 
-                              SelectedValue="{Binding Settings.CoverArtSource, Mode=TwoWay}">
+                              SelectedValue="{Binding CurrentAppSettings.CoverArtSource, Mode=TwoWay}">
                         <ComboBox.ItemsSource>
                             <x:Array Type="sys:String" xmlns:sys="clr-namespace:System;assembly=mscorlib">
                                 <sys:String>Deezer</sys:String>
@@ -93,12 +101,12 @@
                     
                     <CheckBox x:Name="UseCustomCoverCheckBox" 
                               Content="Use custom default cover URL:"
-                              IsChecked="{Binding Settings.UseCustomDefaultCover, Mode=TwoWay}" 
+                              IsChecked="{Binding CurrentAppSettings.UseCustomDefaultCover, Mode=TwoWay}"
                               Margin="0,10,0,0"/>
                     <TextBox x:Name="CustomCoverUrlTextBox" 
                              Width="330"
                              Margin="20,0,0,5"
-                             Text="{Binding Settings.CustomDefaultCoverUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             Text="{Binding CurrentAppSettings.CustomDefaultCoverUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              Visibility="{Binding IsChecked, ElementName=UseCustomCoverCheckBox, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 </StackPanel>
 

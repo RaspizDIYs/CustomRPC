@@ -12,7 +12,6 @@ using Wpf.Ui;
 using Wpf.Ui.Appearance;
 using CustomMediaRPC.Utils;
 using CustomMediaRPC.Models;
-using CustomMediaRPC.Services;
 using System.Windows;
 using System.Windows.Controls;
 using DiscordRPC;
@@ -26,6 +25,9 @@ using System.ComponentModel; // Добавлено для Closing
 using System.Windows.Data; // Добавлено для конвертера
 using System.Globalization; // Добавлено для конвертера
 using System.Reflection; // Для получения версии
+using CustomMediaRPC.Views;
+using CustomMediaRPC.Services; // Возвращаем обратно
+using Windows.Storage.Streams; // Добавляем using
 
 namespace CustomMediaRPC.Views;
 
@@ -80,13 +82,15 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private const string EncodedLastFmApiKey = "NTU4MDdkZjA4MjhmMTdkNGY0YWYwZWJmYzU3Y2I4MTk="; // Base64 of "55807df0828f17d4f4af0ebfc57cb819"
     // -------------------------------------
 
+    public AppSettings CurrentAppSettings => _appSettings; // Добавляем публичное свойство
+
     public MainWindow(AppSettings settings) // Изменен конструктор
     {
         InitializeComponent();
         _appSettings = settings; // Сохраняем настройки
         
-        // Устанавливаем DataContext для привязок в XAML
-        this.DataContext = new { Settings = _appSettings }; 
+        // Устанавливаем DataContext на сам объект MainWindow
+        this.DataContext = this; 
         
         // --- Получение и отображение версии --- 
         try
@@ -180,6 +184,14 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         LoadLinkCheckBoxStates();
 
         UpdateButtonStates();
+        
+        // Инициализируем сервис плавающего плеера, передавая ему настройки
+        FloatingPlayerService.Instance.Initialize(_appSettings);
+        
+        // Подписываемся на события кнопок плавающего плеера
+        FloatingPlayerService.Instance.PreviousRequested += FloatingPlayer_PreviousRequested;
+        FloatingPlayerService.Instance.PlayPauseToggleRequested += FloatingPlayer_PlayPauseToggleRequested;
+        FloatingPlayerService.Instance.NextRequested += FloatingPlayer_NextRequested;
     }
 
     private void InitializeDiscord()
@@ -711,9 +723,22 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             if (_mediaStateManager.ShouldUpdatePresence(newPresence, stopwatch))
             {
                 DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] Presence data changed. Calling _client.SetPresence...");
+                string title = _mediaStateManager.CurrentState.Title ?? "Unknown Title";
+                string artist = _mediaStateManager.CurrentState.Artist ?? "Unknown Artist";
+                // string? coverUrl = _mediaStateManager.CurrentState.CoverArtUrl; // URL больше не нужен для плеера
+                MediaPlaybackStatus status = _mediaStateManager.CurrentState.Status; // Получаем статус
+                IRandomAccessStreamReference? thumbnail = _mediaStateManager.CurrentState.CoverArtThumbnail; // Получаем миниатюру
+
+                DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] Calling _client.SetPresence...");
                 _client.SetPresence(newPresence);
+                UpdateStatusText($"{title} - {artist}");
+                
+                // Обновляем плавающий плеер
+                // DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] Updating Floating Player: Title='{title}', Artist='{artist}', Status='{status}', CoverUrl='{coverUrl ?? "NULL"}'");
+                DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] Updating Floating Player: Title='{title}', Artist='{artist}', Status='{status}', Thumbnail: {thumbnail != null}"); // Лог с миниатюрой
+                FloatingPlayerService.Instance.UpdateContent(title, artist, status, thumbnail); // Передаем миниатюру
+                
                 DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] SetPresence called successfully. Waiting for OnPresenceUpdate callback...");
-                UpdateStatusText($"{newPresence.Details} - {newPresence.State}");
             }
             else
             {
@@ -744,6 +769,10 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         _client?.Dispose();
         _sessionManager = null; // Явно освобождаем ресурсы SMTC
         _sharedHttpClient?.Dispose();
+        
+        // Останавливаем и закрываем плавающий плеер
+        FloatingPlayerService.Instance.Shutdown();
+        
         // Закрываем приложение полностью
         Application.Current.Shutdown();
     }
@@ -926,8 +955,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             {
                 LinkButtonsExpander.IsExpanded = false;
             }
-            
-            DebugLogger.Log($"UpdateButtonStates: sourceSelected={sourceSelected}, _isRpcConnected={_isRpcConnected}, canConnect={canConnect}, canDisconnect={canDisconnect}, SessionComboBox.IsEnabled={SessionComboBox.IsEnabled}, SettingsEnabled={settingsEnabled}");
+             DebugLogger.Log($"UpdateButtonStates: sourceSelected={sourceSelected}, _isRpcConnected={_isRpcConnected}, canConnect={canConnect}, canDisconnect={canDisconnect}, SessionComboBox.IsEnabled={SessionComboBox.IsEnabled}, SettingsEnabled={settingsEnabled}");
         });
     }
 
@@ -1148,4 +1176,68 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     {
         // ... existing code ...
     }
+
+    private void SettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        // Передаем _appSettings в окно настроек
+        var settingsWindow = new SettingsWindow(_appSettings) 
+        {
+            Owner = this // Устанавливаем владельца, чтобы окно настроек было модальным по отношению к главному
+        };
+        settingsWindow.ShowDialog(); // Показываем как модальное диалоговое окно
+        // После закрытия окна настроек, можно обновить что-то, если нужно
+        // Например, обновить DataContext главного окна, если настройки влияют на него
+        // this.DataContext = new { Settings = _appSettings }; // Перепривязка, если нужно
+        // UpdateButtonStates(); // Обновить состояния кнопок, если они зависят от AppSettings
+    }
+
+    // --- Обработчики событий от плавающего плеера ---
+    private async void FloatingPlayer_PreviousRequested(object? sender, EventArgs e)
+    {
+        if (_currentSession != null)
+        {
+            try
+            {
+                DebugLogger.Log("Floating Player: Previous requested.");
+                await _currentSession.TrySkipPreviousAsync();
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Log("Error calling TrySkipPreviousAsync", ex);
+            }
+        }
+    }
+
+    private async void FloatingPlayer_PlayPauseToggleRequested(object? sender, EventArgs e)
+    {
+         if (_currentSession != null)
+        {
+            try
+            {
+                DebugLogger.Log("Floating Player: Play/Pause requested.");
+                await _currentSession.TryTogglePlayPauseAsync();
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Log("Error calling TryTogglePlayPauseAsync", ex);
+            }
+        }
+    }
+
+    private async void FloatingPlayer_NextRequested(object? sender, EventArgs e)
+    {
+         if (_currentSession != null)
+        {
+            try
+            {
+                DebugLogger.Log("Floating Player: Next requested.");
+                await _currentSession.TrySkipNextAsync();
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Log("Error calling TrySkipNextAsync", ex);
+            }
+        }
+    }
+    // -----------------------------------------------
 }

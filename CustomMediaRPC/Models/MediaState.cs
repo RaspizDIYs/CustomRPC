@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using DiscordRPC;
 using CustomMediaRPC.Utils;
+using Windows.Storage.Streams;
 
 namespace CustomMediaRPC.Models;
 
@@ -20,6 +21,8 @@ public class MediaState
     public string? Album { get; set; }
     public MediaPlaybackStatus Status { get; set; }
     public string? SourceAppId { get; set; }
+    public string? CoverArtUrl { get; set; }
+    public IRandomAccessStreamReference? CoverArtThumbnail { get; set; }
     
     public string GetDisplayTitle()
     {

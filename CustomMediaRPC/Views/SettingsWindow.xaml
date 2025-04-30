@@ -1,0 +1,51 @@
+<ui:FluentWindow x:Class="CustomMediaRPC.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        mc:Ignorable="d"
+        Title="Settings"
+        Height="300" Width="400"
+        ResizeMode="NoResize" WindowStartupLocation="CenterOwner"
+        ExtendsContentIntoTitleBar="True" WindowCornerPreference="Round" WindowBackdropType="Mica">
+    <DockPanel>
+        <ui:TitleBar DockPanel.Dock="Top"
+                     Title="Settings"
+                     ShowMaximize="False"
+                     ShowMinimize="False"
+                     CloseClicked="TitleBar_CloseClicked"/>
+        <Grid Margin="10">
+            <StackPanel>
+                <TextBlock Text="Floating Player Settings" FontWeight="SemiBold" Margin="5,0,5,5"/>
+                <CheckBox x:Name="EnableFloatingPlayerCheckBox"
+                          Content="Enable Floating Player"
+                          Margin="5,0,5,5"
+                          Checked="EnableFloatingPlayerCheckBox_Changed"
+                          Unchecked="EnableFloatingPlayerCheckBox_Changed"/>
+                <CheckBox x:Name="AlwaysOnTopCheckBox"
+                           Content="Player Always On Top"
+                           Margin="25,0,5,5" 
+                           IsEnabled="{Binding IsChecked, ElementName=EnableFloatingPlayerCheckBox}"
+                           Checked="AlwaysOnTopCheckBox_Changed"
+                           Unchecked="AlwaysOnTopCheckBox_Changed"/>
+
+                <Separator Margin="5,10,5,10"/>
+
+                <TextBlock Text="General Settings" FontWeight="SemiBold" Margin="5,0,5,5"/>
+                <CheckBox x:Name="LaunchOnStartupCheckBox"
+                          Content="Launch on Windows startup"
+                          Margin="5,0,5,5"
+                          Checked="LaunchOnStartupCheckBox_Changed"
+                          Unchecked="LaunchOnStartupCheckBox_Changed"/>
+                
+                <CheckBox x:Name="AutoUpdateCheckBox"
+                          Content="Check for updates automatically on startup"
+                          Margin="5,0,5,5"
+                          Checked="AutoUpdateCheckBox_Changed"
+                          Unchecked="AutoUpdateCheckBox_Changed"/>
+
+            </StackPanel>
+        </Grid>
+    </DockPanel>
+</ui:FluentWindow> 

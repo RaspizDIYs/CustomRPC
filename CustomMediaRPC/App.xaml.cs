@@ -47,8 +47,16 @@ public partial class App : Application
             
             if (UpdateManager?.IsInstalled == true) // Проверяем, установлено ли приложение и инициализирован ли менеджер
             {
-                // Запускаем проверку обновлений
-                await CheckForUpdates();
+                // Проверяем настройку автообновления
+                if (SettingsService.CurrentSettings.AutoCheckForUpdates)
+                {
+                    // Запускаем проверку обновлений
+                    await CheckForUpdates();
+                }
+                else
+                {
+                    Console.WriteLine("Автоматическая проверка обновлений отключена в настройках.");
+                }
             } else
             {
                 Console.WriteLine("Приложение не установлено через Velopack или UpdateManager null, пропускаем проверку обновлений.");

@@ -17,6 +17,14 @@ public class AppSettings : INotifyPropertyChanged
     private bool _connectOnStartup;
     private bool _autoDetectGame = true; // Existing setting, assuming default is true
 
+    // Новые настройки для плавающего плеера
+    private bool _enableFloatingPlayer;
+    private bool _playerAlwaysOnTop = true; // По умолчанию включено, если плеер активен
+
+    // Новые общие настройки
+    private bool _launchOnStartup;
+    private bool _autoCheckForUpdates = true; // По умолчанию включено
+
     // Список выбранных кнопок-ссылок
     private List<string> _selectedLinkButtonSites = new List<string>();
 
@@ -86,6 +94,32 @@ public class AppSettings : INotifyPropertyChanged
         // Используем new List<string>(value), чтобы SetField обнаружил изменение, 
         // если просто модифицировать существующий список, он не сработает.
         set => SetField(ref _selectedLinkButtonSites, new List<string>(value)); 
+    }
+
+    // Свойства для новых настроек
+    public bool EnableFloatingPlayer
+    {
+        get => _enableFloatingPlayer;
+        set => SetField(ref _enableFloatingPlayer, value);
+    }
+
+    public bool PlayerAlwaysOnTop
+    {
+        get => _playerAlwaysOnTop;
+        set => SetField(ref _playerAlwaysOnTop, value);
+    }
+
+    // Свойства для новых общих настроек
+    public bool LaunchOnStartup
+    {
+        get => _launchOnStartup;
+        set => SetField(ref _launchOnStartup, value);
+    }
+
+    public bool AutoCheckForUpdates
+    {
+        get => _autoCheckForUpdates;
+        set => SetField(ref _autoCheckForUpdates, value);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

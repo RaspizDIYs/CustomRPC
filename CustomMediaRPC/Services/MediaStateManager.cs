@@ -7,6 +7,7 @@ using CustomMediaRPC.Models;
 using CustomMediaRPC.Utils;
 using System.Threading;
 using System.Collections.Generic;
+using Windows.Storage.Streams;
 
 namespace CustomMediaRPC.Services;
 
@@ -94,10 +95,12 @@ public class MediaStateManager
                     GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing => MediaPlaybackStatus.Playing,
                     GlobalSystemMediaTransportControlsSessionPlaybackStatus.Paused => MediaPlaybackStatus.Paused,
                     _ => MediaPlaybackStatus.Stopped
-                }
+                },
+                CoverArtThumbnail = mediaProperties.Thumbnail // Сохраняем миниатюру
             };
 
             Debug.WriteLine($"BuildRichPresenceAsync: Created new state from session: {newState}");
+            Debug.WriteLine($"BuildRichPresenceAsync: Thumbnail present: {newState.CoverArtThumbnail != null}"); // Логируем наличие миниатюры
 
             // Сравниваем новое состояние с текущим
             var now = DateTime.UtcNow;
@@ -204,6 +207,11 @@ public class MediaStateManager
             {
                  DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Skipping Cover Art lookup (disabled or missing info).");
             }
+
+            // Сохраняем полученный URL обложки в состояние (даже если это дефолтный)
+            _currentState.CoverArtUrl = largeImageUrl; // URL для Discord
+            // _currentState.CoverArtThumbnail уже установлен при создании newState
+            DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Stored CoverArtUrl in CurrentState: {_currentState.CoverArtUrl}");
 
             // --- Проверка длины largeImageText --- 
             if (largeImageText.Length < 2)
