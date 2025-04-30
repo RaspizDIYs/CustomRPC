@@ -8,7 +8,7 @@
         xmlns:tb="http://www.hardcodet.net/taskbar"
         mc:Ignorable="d"
         Title="MediaPresence"
-        Height="460" Width="400" 
+        Height="500" Width="400" 
         MinHeight="420" MinWidth="400"
         ResizeMode="NoResize" WindowStartupLocation="CenterScreen"
         ExtendsContentIntoTitleBar="True" WindowCornerPreference="Round" WindowBackdropType="Mica"
@@ -41,25 +41,14 @@
                      ShowMaximize="False"
                      ShowMinimize="True">
         </ui:TitleBar>
-        <Grid Margin="10,10,10,10">
+        <Grid Margin="10,0,10,10">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-
-            <!-- Верхняя строка с кнопкой темы -->
-            <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,0,5">
-                <ui:Button x:Name="ThemeCycleButton" 
-                           Icon="WeatherMoon24" 
-                           Click="ThemeCycleButton_Click" 
-                           Appearance="Transparent" 
-                           BorderThickness="0"
-                           Background="Transparent"
-                           ToolTip="Сменить тему"/>
-            </StackPanel>
-     
+            
             <StackPanel Grid.Row="1" Orientation="Vertical" HorizontalAlignment="Left" Margin="0,5,0,5">
                 <ui:TextBlock Text="Select Media Source:" Margin="5,0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
                 <StackPanel Orientation="Horizontal">
@@ -70,6 +59,14 @@
                 <StackPanel Orientation="Horizontal" Margin="5,5,0,5">
                     <ui:Button x:Name="ConnectButton" Content="Connect" Width="100" Margin="0,0,5,0" Click="ConnectButton_Click" Appearance="Primary" IsEnabled="False"/>
                     <ui:Button x:Name="DisconnectButton" Content="Disconnect" Width="100" Click="DisconnectButton_Click" IsEnabled="False"/>
+                    <ui:Button x:Name="ThemeCycleButton" 
+                               Icon="WeatherMoon24" 
+                               Click="ThemeCycleButton_Click" 
+                               Appearance="Transparent" 
+                               BorderThickness="0"
+                               Background="Transparent"
+                               ToolTip="Сменить тему"
+                               Margin="130,0,0,0"/>
                 </StackPanel>
 
                 <!-- Настройки обложек: Убираем GroupBox, оставляем StackPanel -->
@@ -104,6 +101,23 @@
                              Text="{Binding Settings.CustomDefaultCoverUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              Visibility="{Binding IsChecked, ElementName=UseCustomCoverCheckBox, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 </StackPanel>
+
+                <!-- Оборачиваем выбор сайтов в Expander -->
+                <Expander x:Name="LinkButtonsExpander" Header="Select link buttons (max 2)" Margin="0,10,0,0">
+                    <!-- Добавляем ScrollViewer -->
+                    <ScrollViewer MaxHeight="75" VerticalScrollBarVisibility="Auto">
+                        <!-- Используем UniformGrid вместо StackPanel -->
+                        <UniformGrid Columns="2" Margin="5,0,0,0"> <!-- Убрал старый отступ StackPanel, добавил небольшой для UniformGrid -->
+                            <!-- Убираем большие вертикальные отступы у чекбоксов, UniformGrid сам расставит -->
+                            <CheckBox x:Name="SpotifyLinkCheckBox" Content="Spotify" Margin="5" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                            <CheckBox x:Name="YouTubeMusicLinkCheckBox" Content="YouTube Music" Margin="5" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                            <CheckBox x:Name="AppleMusicLinkCheckBox" Content="Apple Music" Margin="5" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                            <CheckBox x:Name="YandexMusicLinkCheckBox" Content="Yandex Music" Margin="5" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                            <CheckBox x:Name="DeezerLinkCheckBox" Content="Deezer" Margin="5" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                            <CheckBox x:Name="VkMusicLinkCheckBox" Content="VK Music" Margin="5" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                        </UniformGrid>
+                    </ScrollViewer>
+                </Expander>
             </StackPanel>
 
             <ui:TextBlock Grid.Row="2" x:Name="StatusTextBlock" Text="Initializing..." Margin="0,10,0,0" VerticalAlignment="Center" HorizontalAlignment="Center" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"/>
@@ -113,7 +127,7 @@
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Bottom">
                     <TextBlock Margin="5,0,10,0" VerticalAlignment="Center">
                         <Hyperlink Foreground="{DynamicResource TextFillColorSecondaryBrush}" Click="DevelopersHyperlink_Click">
-                            Разработчики
+                            Developers
                         </Hyperlink>
                     </TextBlock>
                 </StackPanel>

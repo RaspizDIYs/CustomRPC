@@ -22,7 +22,7 @@ using System.Windows.Threading;
 using System.Windows.Documents;
 using Wpf.Ui.Controls;
 using System.Text; // Добавим для Base64
-using System.ComponentModel; // Добавили для Closing
+using System.ComponentModel; // Добавлено для Closing
 using System.Windows.Data; // Добавлено для конвертера
 using System.Globalization; // Добавлено для конвертера
 using System.Reflection; // Для получения версии
@@ -67,6 +67,10 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private const int DebounceMilliseconds = 100;
 
     private ApplicationTheme _currentAppTheme;
+
+    // Список выбранных сайтов для кнопок
+    private List<string> _selectedLinkSites = new List<string>();
+    private const int MaxLinkSites = 2;
 
     // --- Захардкоженные ключи (Base64) ---
     private const string EncodedClientId = "MTM2NTM5NzU2ODY3NDIwNTc4OA=="; // Base64 of "1365397568674205788"
@@ -222,6 +226,11 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                 DebugLogger.Log($"Received Ready from user {e.User.Username}");
                 _isRpcConnected = true;
                 _mediaStateManager?.SetLastSentPresence(null);
+                if (_mediaStateManager != null) 
+                {
+                    _mediaStateManager.SelectedLinkSites = new List<string>(_selectedLinkSites);
+                    DebugLogger.Log($"[OnReady] Copied selected sites to MediaStateManager: {string.Join(", ", _selectedLinkSites)}");
+                }
                 await UpdatePresenceFromSession();
                 UpdateStatusText($"Connected as {e.User.Username}");
                 UpdateButtonStates();
@@ -537,11 +546,18 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         };
         _presenceUpdateDebounceTimer.Tick += async (sender, args) =>
         {
+            DebugLogger.Log($"[TIMER ---ms] Tick event handler started.");
             if (sender is DispatcherTimer timer)
             {
                 timer.Stop();
                 var stopwatch = Stopwatch.StartNew();
                 DebugLogger.Log($"[TIMER {stopwatch.ElapsedMilliseconds}ms] Debounce timer elapsed. Calling UpdatePresenceFromSession...");
+                // Передаем актуальный список сайтов перед обновлением
+                if (_mediaStateManager != null) 
+                {
+                    _mediaStateManager.SelectedLinkSites = new List<string>(_selectedLinkSites);
+                    DebugLogger.Log($"[TIMER {stopwatch.ElapsedMilliseconds}ms] Updated MediaStateManager.SelectedLinkSites: {string.Join(", ", _selectedLinkSites)}");
+                }
                 await UpdatePresenceFromSession(stopwatch);
             }
         };
@@ -695,6 +711,12 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             if (_isRpcConnected)
             {
                 DebugLogger.Log("SwitchToSession: Requesting presence update for the new session...");
+                // Передаем актуальный список сайтов перед обновлением
+                if (_mediaStateManager != null) 
+                {
+                    _mediaStateManager.SelectedLinkSites = new List<string>(_selectedLinkSites);
+                     DebugLogger.Log($"[SwitchToSession] Updated MediaStateManager.SelectedLinkSites: {string.Join(", ", _selectedLinkSites)}");
+                }
                 Dispatcher.InvokeAsync(() => UpdatePresenceFromSession());
             }
             DebugLogger.Log($"Switched to session: {newSessionId}");
@@ -801,13 +823,12 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             bool sourceSelected = _currentSession != null;
             bool canConnect = sourceSelected && !_isRpcConnected;
             bool canDisconnect = _isRpcConnected;
-            
+
             ConnectButton.IsEnabled = canConnect;
             DisconnectButton.IsEnabled = canDisconnect;
-            
+
             // Блокируем выбор источника и настройки после подключения
             SessionComboBox.IsEnabled = !_isRpcConnected;
-            // SettingsGroup.IsEnabled = !_isRpcConnected; // Удаляем старую строку
 
             // Блокируем отдельные элементы управления настройками
             bool settingsEnabled = !_isRpcConnected;
@@ -816,6 +837,14 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             CoverArtSourceComboBox.IsEnabled = settingsEnabled && (EnableCoverArtCheckBox.IsChecked == true);
             UseCustomCoverCheckBox.IsEnabled = settingsEnabled;
             CustomCoverUrlTextBox.IsEnabled = settingsEnabled; // Видимость управляется отдельно, но доступность тоже блокируем
+
+            // Блокируем Expander с чекбоксами ссылок
+            LinkButtonsExpander.IsEnabled = settingsEnabled;
+            // И сворачиваем его, если подключились
+            if (!settingsEnabled) // settingsEnabled будет false, когда _isRpcConnected = true
+            {
+                LinkButtonsExpander.IsExpanded = false;
+            }
             
             DebugLogger.Log($"UpdateButtonStates: sourceSelected={sourceSelected}, _isRpcConnected={_isRpcConnected}, canConnect={canConnect}, canDisconnect={canDisconnect}, SessionComboBox.IsEnabled={SessionComboBox.IsEnabled}, SettingsEnabled={settingsEnabled}");
         });
@@ -894,4 +923,92 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     }
     */
     // ---------------------------------------------------
+
+    // Обработчик для чекбоксов ссылок
+    private void LinkCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        DebugLogger.Log("[LinkCheckBox_Changed] Handler started.");
+        if (sender is not CheckBox clickedCheckBox || clickedCheckBox.Content == null) 
+        {
+            DebugLogger.Log("[LinkCheckBox_Changed] Handler exited: Invalid sender or content.");
+            return;
+        }
+
+        string siteName = clickedCheckBox.Content.ToString() ?? string.Empty;
+        if (string.IsNullOrEmpty(siteName)) 
+        {
+             DebugLogger.Log("[LinkCheckBox_Changed] Handler exited: Site name is empty.");
+            return;
+        }
+        
+        DebugLogger.Log($"[LinkCheckBox_Changed] Checkbox '{siteName}' changed. IsChecked: {clickedCheckBox.IsChecked}");
+
+        if (clickedCheckBox.IsChecked == true)
+        {
+            if (_selectedLinkSites.Count < MaxLinkSites)
+            {
+                if (!_selectedLinkSites.Contains(siteName))
+                {
+                    _selectedLinkSites.Add(siteName);
+                }
+            }
+            else // Уже выбрано максимальное количество
+            {
+                // Отменяем выбор этого чекбокса
+                clickedCheckBox.IsChecked = false; 
+                // Можно показать уведомление пользователю
+                System.Windows.MessageBox.Show($"You can select up to {MaxLinkSites} sites.", "Selection Limit Reached", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+                return; // Выходим, чтобы не обновлять состояние остальных
+            }
+        }
+        else // Checkbox был снят
+        {
+            _selectedLinkSites.Remove(siteName);
+        }
+
+        // Обновляем состояние Enabled для всех чекбоксов
+        UpdateLinkCheckBoxStates();
+        
+        // Если RPC подключен, триггерим немедленное обновление presence 
+        // чтобы кнопки обновились сразу после изменения чекбокса
+        if (_isRpcConnected) 
+        {
+             DebugLogger.Log("[LinkCheckBox_Changed] RPC is connected, requesting presence update.");
+             // Передаем актуальный список сайтов перед обновлением
+             if (_mediaStateManager != null) 
+             {
+                _mediaStateManager.SelectedLinkSites = new List<string>(_selectedLinkSites);
+                 DebugLogger.Log($"[LinkCheckBox_Changed] Updated MediaStateManager.SelectedLinkSites: {string.Join(", ", _selectedLinkSites)}");
+             }
+             // Используем прямой вызов, а не отложенный, для мгновенного эффекта
+             // await UpdatePresenceFromSession(); // Можно использовать прямой вызов, если нет опасений по частоте
+             RequestPresenceUpdateDebounced(); // Или используем дебаунс, если обновлений может быть много подряд
+             DebugLogger.Log("[LinkCheckBox_Changed] RequestPresenceUpdateDebounced was called.");
+        }
+        else
+        {
+            DebugLogger.Log("[LinkCheckBox_Changed] RPC is not connected, skipping presence update request.");
+        }
+    }
+
+    // Метод для обновления состояния Enabled чекбоксов ссылок
+    private void UpdateLinkCheckBoxStates()
+    {
+        bool limitReached = _selectedLinkSites.Count >= MaxLinkSites;
+        
+        // Проходим по всем потенциальным чекбоксам (лучше найти их по имени или типу)
+        // Этот способ не очень надежный, лучше перебирать элементы управления в контейнере
+        SpotifyLinkCheckBox.IsEnabled = limitReached ? SpotifyLinkCheckBox.IsChecked == true : true;
+        YouTubeMusicLinkCheckBox.IsEnabled = limitReached ? YouTubeMusicLinkCheckBox.IsChecked == true : true;
+        AppleMusicLinkCheckBox.IsEnabled = limitReached ? AppleMusicLinkCheckBox.IsChecked == true : true;
+        YandexMusicLinkCheckBox.IsEnabled = limitReached ? YandexMusicLinkCheckBox.IsChecked == true : true;
+        DeezerLinkCheckBox.IsEnabled = limitReached ? DeezerLinkCheckBox.IsChecked == true : true;
+        VkMusicLinkCheckBox.IsEnabled = limitReached ? VkMusicLinkCheckBox.IsChecked == true : true;
+        // Добавь сюда другие чекбоксы, если они есть
+    }
+
+    private async void LoadAppSettings()
+    {
+        // ... existing code ...
+    }
 }

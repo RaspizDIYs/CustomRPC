@@ -6,6 +6,7 @@ using System.Diagnostics;
 using CustomMediaRPC.Models;
 using CustomMediaRPC.Utils;
 using System.Threading;
+using System.Collections.Generic;
 
 namespace CustomMediaRPC.Services;
 
@@ -25,6 +26,9 @@ public class MediaStateManager
 
     // Делаем публичное свойство для доступа к времени старта трека
     public DateTime? CurrentTrackStartTime => _currentTrackStartTime;
+
+    // Список выбранных сайтов для кнопок (получаем извне)
+    public List<string> SelectedLinkSites { get; set; } = new List<string>();
 
     public MediaStateManager(SpotifyService spotifyService, DeezerService deezerService, AppSettings settings)
     {
@@ -276,7 +280,8 @@ public class MediaStateManager
                     LargeImageKey = largeImageUrl,
                     LargeImageText = safeLargeImageText
                 },
-                Timestamps = timestamps
+                Timestamps = timestamps,
+                Buttons = BuildLinkButtons(stopwatch)
             };
 
             Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] BuildRichPresenceAsync: Created presence - Details: '{safeDetails}', State: '{safeState}', ImageKey: '{largeImageUrl}', ImageText: '{safeLargeImageText}'");
@@ -377,6 +382,14 @@ public class MediaStateManager
             return false; 
         }
 
+        // Сравнение Кнопок (добавлено)
+        bool buttonsEqual = AreButtonsEqual(p1.Buttons, p2.Buttons);
+        if (!buttonsEqual) 
+        { 
+            DebugLogger.Log($"AreRichPresenceEqual: Buttons differ."); 
+            return false; 
+        }
+
         // Если все проверки пройдены
         DebugLogger.Log("AreRichPresenceEqual: All compared properties are equal.");
         return true;
@@ -429,5 +442,88 @@ public class MediaStateManager
     {
         _lastSentPresence = presence;
         DebugLogger.Log($"SetLastSentPresence explicitly set. Details: {presence?.Details ?? "null"}");
+    }
+
+    // Новый метод для создания кнопок ссылок
+    private Button[]? BuildLinkButtons(Stopwatch? stopwatch = null)
+    {
+        if (SelectedLinkSites == null || SelectedLinkSites.Count == 0) 
+        {
+            DebugLogger.Log($"[BUTTONS {stopwatch?.ElapsedMilliseconds}ms] No sites selected, returning null buttons.");
+            return null;
+        }
+
+        List<Button> buttons = new List<Button>();
+        DebugLogger.Log($"[BUTTONS {stopwatch?.ElapsedMilliseconds}ms] Building buttons for: {string.Join(", ", SelectedLinkSites)}");
+
+        foreach (var siteName in SelectedLinkSites)
+        {
+            // TODO: Реализовать получение реального URL трека для каждого сервиса
+            string? trackUrl = GetTrackUrlForService(siteName, _currentState.Artist, _currentState.Title);
+
+            if (!string.IsNullOrEmpty(trackUrl))
+            {
+                buttons.Add(new Button
+                {
+                    Label = $"Listen on {siteName}",
+                    Url = trackUrl
+                });
+                DebugLogger.Log($"[BUTTONS {stopwatch?.ElapsedMilliseconds}ms] Added button for {siteName} with URL: {trackUrl}");
+            }
+            else
+            {
+                 DebugLogger.Log($"[BUTTONS {stopwatch?.ElapsedMilliseconds}ms] Could not get URL for {siteName}, skipping button.");
+            }
+            
+            // Discord поддерживает максимум 2 кнопки
+            if (buttons.Count >= 2) break; 
+        }
+
+        return buttons.Count > 0 ? buttons.ToArray() : null;
+    }
+    
+    // Заглушка - Заменить реальной логикой поиска URL!
+    private string? GetTrackUrlForService(string serviceName, string? artist, string? title)
+    {
+        if (string.IsNullOrEmpty(artist) || string.IsNullOrEmpty(title)) return null;
+        
+        // Очень упрощенный пример - нужно использовать API или поиск!
+        string query = Uri.EscapeDataString($"{artist} {title}");
+        switch (serviceName.ToLowerInvariant())
+        {
+            case "spotify":
+                return $"https://open.spotify.com/search/{query}";
+            case "youtube music":
+                return $"https://music.youtube.com/search?q={query}";
+            case "apple music":
+                return $"https://music.apple.com/us/search?term={query}"; // Пример, может отличаться для региона
+            case "yandex music":
+                return $"https://music.yandex.ru/search?text={query}";
+            case "deezer":
+                return $"https://www.deezer.com/search/{query}"; // Deezer использует /search/term
+            case "vk music":
+                return $"https://vk.com/audio?q={query}";
+            default:
+                return null;
+        }
+    }
+
+    // Новый вспомогательный метод для сравнения массивов кнопок
+    private bool AreButtonsEqual(Button[]? b1, Button[]? b2)
+    {
+        if (ReferenceEquals(b1, b2)) return true; // Оба null или одна ссылка
+        if (b1 is null || b2 is null) return false; // Один null, другой нет
+        if (b1.Length != b2.Length) return false; // Разная длина
+
+        for (int i = 0; i < b1.Length; i++)
+        {
+            // Сравниваем Label и Url каждой кнопки
+            if (b1[i].Label != b2[i].Label || b1[i].Url != b2[i].Url)
+            {
+                return false;
+            }
+        }
+
+        return true; // Все кнопки идентичны
     }
 } 

@@ -28,7 +28,7 @@
                     <TextBlock Text="Spellov" VerticalAlignment="Center"/>
                 </StackPanel>
                 <ui:Button x:Name="DonateButtonAbout" 
-                           Content="Поддержать"
+                           Content="Fund ❤️"
                            Width="120" 
                            Click="DonateButtonAbout_Click" 
                            Icon="Heart24"
