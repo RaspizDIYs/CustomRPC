@@ -115,6 +115,7 @@
                             <CheckBox x:Name="YandexMusicLinkCheckBox" Content="Yandex Music" Margin="5" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
                             <CheckBox x:Name="DeezerLinkCheckBox" Content="Deezer" Margin="5" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
                             <CheckBox x:Name="VkMusicLinkCheckBox" Content="VK Music" Margin="5" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                            <CheckBox x:Name="GitHubLinkCheckBox" Content="Project Download" Margin="5" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
                         </UniformGrid>
                     </ScrollViewer>
                 </Expander>

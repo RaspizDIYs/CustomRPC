@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Collections.Generic;
 
 namespace CustomMediaRPC.Models;
 
@@ -15,6 +16,9 @@ public class AppSettings : INotifyPropertyChanged
     private bool _startMinimized;
     private bool _connectOnStartup;
     private bool _autoDetectGame = true; // Existing setting, assuming default is true
+
+    // Список выбранных кнопок-ссылок
+    private List<string> _selectedLinkButtonSites = new List<string>();
 
     public bool EnableCoverArtFetching
     {
@@ -76,6 +80,13 @@ public class AppSettings : INotifyPropertyChanged
         set => SetField(ref _autoDetectGame, value);
     }
 
+    public List<string> SelectedLinkButtonSites
+    {
+        get => _selectedLinkButtonSites;
+        // Используем new List<string>(value), чтобы SetField обнаружил изменение, 
+        // если просто модифицировать существующий список, он не сработает.
+        set => SetField(ref _selectedLinkButtonSites, new List<string>(value)); 
+    }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

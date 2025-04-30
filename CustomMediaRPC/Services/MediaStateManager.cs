@@ -463,12 +463,17 @@ public class MediaStateManager
 
             if (!string.IsNullOrEmpty(trackUrl))
             {
+                // Определяем текст кнопки
+                string buttonLabel = siteName.Equals("Project Download", StringComparison.OrdinalIgnoreCase)
+                                        ? "Get It"
+                                        : $"Listen on {siteName}";
+                
                 buttons.Add(new Button
                 {
-                    Label = $"Listen on {siteName}",
+                    Label = buttonLabel, // Используем определенный текст
                     Url = trackUrl
                 });
-                DebugLogger.Log($"[BUTTONS {stopwatch?.ElapsedMilliseconds}ms] Added button for {siteName} with URL: {trackUrl}");
+                DebugLogger.Log($"[BUTTONS {stopwatch?.ElapsedMilliseconds}ms] Added button '{buttonLabel}' for {siteName} with URL: {trackUrl}");
             }
             else
             {
@@ -503,6 +508,8 @@ public class MediaStateManager
                 return $"https://www.deezer.com/search/{query}"; // Deezer использует /search/term
             case "vk music":
                 return $"https://vk.com/audio?q={query}";
+            case "project download": // Добавляем кейс для скачивания
+                return "https://github.com/RaspizDIYs/CustomRPC"; 
             default:
                 return null;
         }

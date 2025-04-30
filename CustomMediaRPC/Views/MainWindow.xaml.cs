@@ -68,7 +68,10 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
     private ApplicationTheme _currentAppTheme;
 
-    // Список выбранных сайтов для кнопок
+    // Словарь для связи имени сайта и чекбокса
+    private Dictionary<string, CheckBox> _linkCheckBoxes = new Dictionary<string, CheckBox>();
+
+    // Список выбранных сайтов для кнопок (локальная копия)
     private List<string> _selectedLinkSites = new List<string>();
     private const int MaxLinkSites = 2;
 
@@ -171,6 +174,10 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         Dispatcher.InvokeAsync(InitializeMediaIntegration);
         InitializeDebounceTimer();
         this.Closed += MainWindow_Closed;
+        
+        // Инициализируем и загружаем состояние чекбоксов ссылок
+        InitializeLinkCheckBoxes();
+        LoadLinkCheckBoxStates();
 
         UpdateButtonStates();
     }
@@ -508,14 +515,88 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         try
         {
             var mediaProperties = await session.TryGetMediaPropertiesAsync();
-            string name = !string.IsNullOrEmpty(session.SourceAppUserModelId) ? session.SourceAppUserModelId : "Unknown Source";
+            
+            // --- Получаем и очищаем имя источника --- 
+            string rawAumid = session.SourceAppUserModelId;
+            string name = "Unknown Source"; // Имя по умолчанию
+
+            if (!string.IsNullOrEmpty(rawAumid))
+            {
+                // --- Добавляем обработку известных AUMID --- 
+                switch (rawAumid.ToLowerInvariant()) // Сравниваем в нижнем регистре
+                {
+                    // Плееры
+                    case "ru.yandex.desktop.music":
+                        name = "Yandex Music";
+                        break;
+                    case "spotify": 
+                    case var s when s.StartsWith("spotifyab.spotifymusic_"): 
+                        name = "Spotify";
+                        break;
+                    case "aimp": 
+                        name = "AIMP";
+                        break;
+                    case "foobar2000":
+                        name = "foobar2000";
+                        break;
+                    case "vlc":
+                    case var v when v.StartsWith("videolan.vlc_"): 
+                        name = "VLC";
+                        break;
+                    case var it when it.StartsWith("itunes_"): // iTunes часто имеет постфикс
+                         name = "iTunes";
+                         break;
+                    // Добавь сюда другие плееры
+                    
+                    // Браузеры (часто имеют постфикс профиля после '!')
+                    case var chr when chr.StartsWith("chrome!"): // Стандартный Chrome?
+                    case var chr_sx when chr_sx.StartsWith("chromium!"): // Chromium-based
+                        name = "Chrome/Chromium";
+                        break;
+                    case var ff when ff.StartsWith("firefox!"):
+                    case var ff_dev when ff_dev.StartsWith("firefoxdeveloperedition!"):
+                    case var ff_nightly when ff_nightly.StartsWith("firefoxnightly!"):
+                         name = "Firefox";
+                         break;
+                    case var edg when edg.StartsWith("microsoftedge.stable!"):
+                    case var edg_legacy when edg_legacy.StartsWith("microsoft.microsoftedge!"): // Старый Edge
+                        name = "Microsoft Edge";
+                        break;
+                    case var op when op.StartsWith("opera!"):
+                    case var op_gx when op_gx.StartsWith("operagx!"):
+                         name = "Opera";
+                         break;
+                     case var viv when viv.StartsWith("vivaldi!"): // Как раз твой случай
+                         name = "Vivaldi";
+                         break;
+                    // Добавь сюда другие браузеры
+
+                    default: 
+                        // Если ID неизвестен, применяем старую логику с '!'
+                        int bangIndex = rawAumid.IndexOf('!');
+                        if (bangIndex > 0)
+                        {
+                            name = rawAumid.Substring(0, bangIndex);
+                        }
+                        else
+                        {
+                            name = rawAumid; // Оставляем как есть
+                        }
+                        break;
+                }
+                // -------------------------------------------
+            }
+            // ----------------------------------------
+
             if (mediaProperties != null && !string.IsNullOrEmpty(mediaProperties.Title))
             {
+                 // Используем очищенное имя 'name'
                  if (!name.Equals(mediaProperties.Title, StringComparison.OrdinalIgnoreCase))
                     name += $" ({mediaProperties.Title})";
             }
-            else if (name == "Unknown Source")
+            else if (name == "Unknown Source") // Проверяем именно очищенное имя
             {
+                 // Если имя все еще неизвестно, добавляем хэш для уникальности
                  name += $" #{session.GetHashCode()}";
             }
             return name;
@@ -924,6 +1005,58 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     */
     // ---------------------------------------------------
 
+    // Инициализация словаря чекбоксов
+    private void InitializeLinkCheckBoxes()
+    {
+        // Находим все CheckBox внутри UniformGrid внутри LinkButtonsExpander
+        // Это более надежно, чем обращаться по именам напрямую
+        if (LinkButtonsExpander.Content is ScrollViewer sv && sv.Content is System.Windows.Controls.Primitives.UniformGrid ug)
+        {
+            foreach (var child in ug.Children)
+            {
+                if (child is CheckBox cb && cb.Content is string content && !string.IsNullOrEmpty(content))
+                {
+                    _linkCheckBoxes[content] = cb;
+                    DebugLogger.Log($"[InitializeLinkCheckBoxes] Added checkbox: {content}");
+                }
+            }
+        }
+        else
+        {
+            DebugLogger.Log("[InitializeLinkCheckBoxes] Failed to find UniformGrid containing checkboxes.");
+            // Можно добавить запасной вариант с поиском по именам, если нужно
+            // _linkCheckBoxes.Add("Spotify", SpotifyLinkCheckBox);
+            // ... и т.д.
+        }
+    }
+
+    // Загрузка состояния чекбоксов из настроек
+    private void LoadLinkCheckBoxStates()
+    {
+        _selectedLinkSites.Clear(); // Очищаем локальный список
+        var savedSites = _appSettings.SelectedLinkButtonSites ?? new List<string>();
+        DebugLogger.Log($"[LoadLinkCheckBoxStates] Loading saved sites: {string.Join(", ", savedSites)}");
+
+        foreach (var cbPair in _linkCheckBoxes)
+        {
+            bool shouldBeChecked = savedSites.Contains(cbPair.Key);
+            cbPair.Value.IsChecked = shouldBeChecked;
+            if (shouldBeChecked)
+            {
+                 // Добавляем в локальный список только те, что реально отмечены
+                if (!_selectedLinkSites.Contains(cbPair.Key))
+                {
+                     _selectedLinkSites.Add(cbPair.Key); 
+                }
+            }
+             DebugLogger.Log($"[LoadLinkCheckBoxStates] Checkbox '{cbPair.Key}' set to IsChecked={shouldBeChecked}");
+        }
+        
+        // Обновляем состояние доступности после загрузки
+        UpdateLinkCheckBoxStates();
+        DebugLogger.Log($"[LoadLinkCheckBoxStates] Current local selection: {string.Join(", ", _selectedLinkSites)}");
+    }
+
     // Обработчик для чекбоксов ссылок
     private void LinkCheckBox_Changed(object sender, RoutedEventArgs e)
     {
@@ -965,6 +1098,11 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         {
             _selectedLinkSites.Remove(siteName);
         }
+        
+        // --- Сохраняем измененный список в настройки --- 
+        _appSettings.SelectedLinkButtonSites = new List<string>(_selectedLinkSites); 
+        DebugLogger.Log($"[LinkCheckBox_Changed] Saved sites to AppSettings: {string.Join(", ", _appSettings.SelectedLinkButtonSites)}");
+        // -------------------------------------------------
 
         // Обновляем состояние Enabled для всех чекбоксов
         UpdateLinkCheckBoxStates();
@@ -996,15 +1134,14 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     {
         bool limitReached = _selectedLinkSites.Count >= MaxLinkSites;
         
-        // Проходим по всем потенциальным чекбоксам (лучше найти их по имени или типу)
-        // Этот способ не очень надежный, лучше перебирать элементы управления в контейнере
-        SpotifyLinkCheckBox.IsEnabled = limitReached ? SpotifyLinkCheckBox.IsChecked == true : true;
-        YouTubeMusicLinkCheckBox.IsEnabled = limitReached ? YouTubeMusicLinkCheckBox.IsChecked == true : true;
-        AppleMusicLinkCheckBox.IsEnabled = limitReached ? AppleMusicLinkCheckBox.IsChecked == true : true;
-        YandexMusicLinkCheckBox.IsEnabled = limitReached ? YandexMusicLinkCheckBox.IsChecked == true : true;
-        DeezerLinkCheckBox.IsEnabled = limitReached ? DeezerLinkCheckBox.IsChecked == true : true;
-        VkMusicLinkCheckBox.IsEnabled = limitReached ? VkMusicLinkCheckBox.IsChecked == true : true;
-        // Добавь сюда другие чекбоксы, если они есть
+        // Используем словарь для обновления состояния
+        foreach(var cbPair in _linkCheckBoxes)
+        {
+             cbPair.Value.IsEnabled = limitReached ? cbPair.Value.IsChecked == true : true;
+        }
+        // Старый код с прямым доступом по именам больше не нужен
+        // SpotifyLinkCheckBox.IsEnabled = ... 
+        // ... и т.д.
     }
 
     private async void LoadAppSettings()
