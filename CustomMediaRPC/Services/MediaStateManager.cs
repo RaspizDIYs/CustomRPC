@@ -211,12 +211,29 @@ public class MediaStateManager
             string safeState = StringUtils.TruncateStringByBytesUtf8(stateText, Constants.Media.MAX_PRESENCE_TEXT_LENGTH);
             string safeLargeImageText = StringUtils.TruncateStringByBytesUtf8(largeImageText, Constants.Media.MAX_PRESENCE_TEXT_LENGTH);
 
-            // --- Создание Timestamps --- 
+            // --- Создание Timestamps ---
             Timestamps? timestamps = null;
             if (_currentState.Status == MediaPlaybackStatus.Playing && _currentTrackStartTime.HasValue)
             {
-                timestamps = new Timestamps { Start = _currentTrackStartTime.Value };
-                Debug.WriteLine($"BuildRichPresenceAsync: Setting timestamp Start={timestamps.Start}");
+                var timelineProperties = session.GetTimelineProperties();
+                if (timelineProperties != null && timelineProperties.EndTime > TimeSpan.Zero)
+                {
+                    // Рассчитываем время окончания трека
+                    var duration = timelineProperties.EndTime;
+                    var endTimeUtc = _currentTrackStartTime.Value.Add(duration);
+                    timestamps = new Timestamps
+                    {
+                        Start = _currentTrackStartTime.Value,
+                        End = endTimeUtc
+                    };
+                    Debug.WriteLine($"BuildRichPresenceAsync: Setting timestamps Start={timestamps.Start}, End={timestamps.End} (Duration: {duration})");
+                }
+                else
+                {
+                    // Если длительность неизвестна, ставим только время начала
+                    timestamps = new Timestamps { Start = _currentTrackStartTime.Value };
+                    Debug.WriteLine($"BuildRichPresenceAsync: Setting timestamp Start={timestamps.Start} (End time unavailable)");
+                }
             }
             else
             {
