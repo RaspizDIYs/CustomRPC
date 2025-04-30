@@ -123,15 +123,15 @@ namespace CustomMediaRPC.Services
         }
 
         // Обновляем метод, чтобы принимать IRandomAccessStreamReference
-        public void UpdateContent(string title, string artist, MediaPlaybackStatus status, IRandomAccessStreamReference? thumbnail = null)
+        public void UpdateContent(string title, string artist, MediaPlaybackStatus status, IRandomAccessStreamReference? thumbnail = null, TimeSpan? currentPosition = null, TimeSpan? totalDuration = null)
         {
             Application.Current.Dispatcher.Invoke(() =>
             {
                  if (_playerWindow != null && _playerWindow.IsLoaded && _playerWindow.IsVisible)
                  {
                     // Передаем миниатюру вместо URL
-                    _playerWindow.UpdateContent(title, artist, status, thumbnail);
-                    Debug.WriteLine($"FloatingPlayerWindow content updated: {title} - {artist} ({status}), Thumbnail: {thumbnail != null}");
+                    _playerWindow.UpdateContent(title, artist, status, thumbnail, currentPosition, totalDuration);
+                    Debug.WriteLine($"FloatingPlayerWindow content updated: {title} - {artist} ({status}), Thumbnail: {thumbnail != null}, Time: {currentPosition}/{totalDuration}");
                  }
                  else
                  {

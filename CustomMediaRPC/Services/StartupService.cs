@@ -76,7 +76,7 @@ namespace CustomMediaRPC.Services
                      
                      object? value = key.GetValue(AppName);
                      // Проверяем, что значение существует и совпадает с текущим путем (на случай перемещения файла)
-                     return value != null && value.ToString().Equals(AppPath, StringComparison.OrdinalIgnoreCase);
+                     return value?.ToString()?.Equals(AppPath, StringComparison.OrdinalIgnoreCase) ?? false;
                  }
              }
              catch (Exception ex)

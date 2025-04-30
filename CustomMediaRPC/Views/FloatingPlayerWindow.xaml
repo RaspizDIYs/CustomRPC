@@ -6,8 +6,8 @@
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         mc:Ignorable="d"
         Title="Floating Player"
-        Width="200"
-        Height="70"
+        Width="250"
+        Height="80"
         AllowsTransparency="True"
         WindowStyle="None"
         Background="Transparent"
@@ -16,7 +16,7 @@
         ResizeMode="NoResize"
         MouseDown="Window_MouseDown">
     <Border Background="#DD222222" CornerRadius="5" BorderThickness="1" BorderBrush="#55FFFFFF" Padding="5">
-        <Grid>
+        <Grid Margin="5">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
@@ -37,7 +37,7 @@
             </Border>
 
             <!-- Название, Артист и Кнопки -->
-            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+            <StackPanel Grid.Column="1" VerticalAlignment="Top">
                 <TextBlock x:Name="TitleTextBlock"
                            Text="Unknown Title"
                            Foreground="White"
@@ -58,12 +58,14 @@
                             Padding="0" BorderThickness="0" Background="Transparent">
                         <ui:SymbolIcon Symbol="Previous24" Foreground="White"/>
                     </Button>
-                    <Button x:Name="PlayPauseButton"
-                            Click="PlayPauseButton_Click"
-                            Width="25" Height="25" Margin="15,0,15,0"
-                            Padding="0" BorderThickness="0" Background="Transparent">
-                        <ui:SymbolIcon x:Name="PlayPauseIcon" Symbol="Play24" Foreground="White"/>
-                    </Button>
+                    <Grid Width="25" Margin="15,0,15,0">
+                        <Button x:Name="PlayPauseButton"
+                                Click="PlayPauseButton_Click"
+                                Width="25" Height="25"
+                                Padding="0" BorderThickness="0" Background="Transparent">
+                            <ui:SymbolIcon x:Name="PlayPauseIcon" Symbol="Play24" Foreground="White"/>
+                        </Button>
+                    </Grid>
                     <Button x:Name="NextButton"
                             Click="NextButton_Click"
                             Width="25" Height="25" Margin="5,0,0,0"
@@ -71,6 +73,15 @@
                         <ui:SymbolIcon Symbol="Next24" Foreground="White"/>
                     </Button>
                 </StackPanel>
+
+                <ProgressBar x:Name="TrackProgressBar"
+                             Height="5"
+                             Margin="0,8,0,0"
+                             Background="#444444"
+                             Foreground="#FF7F00"
+                             BorderThickness="0"
+                             Minimum="0"
+                             Maximum="100" />
             </StackPanel>
         </Grid>
     </Border>

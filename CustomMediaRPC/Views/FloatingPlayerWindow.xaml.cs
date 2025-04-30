@@ -8,6 +8,8 @@ using CustomMediaRPC.Models; // Для MediaPlaybackStatus
 using Windows.Storage.Streams; // Для IRandomAccessStreamReference
 using System.Runtime.InteropServices.WindowsRuntime; // Для AsStreamForRead()
 using System.IO; // Добавляем для AsStreamForRead()
+using System.Windows.Media;
+using System.Threading.Tasks;
 
 namespace CustomMediaRPC.Views
 {
@@ -36,10 +38,10 @@ namespace CustomMediaRPC.Views
         }
 
         // Обновленный метод для обновления содержимого плеера
-        public async void UpdateContent(string title, string artist, MediaPlaybackStatus status, IRandomAccessStreamReference? thumbnail = null)
+        public async void UpdateContent(string title, string artist, MediaPlaybackStatus status, IRandomAccessStreamReference? thumbnail = null, TimeSpan? currentPosition = null, TimeSpan? totalDuration = null)
         {
-            TitleTextBlock.Text = string.IsNullOrEmpty(title) ? "Unknown Title" : title;
-            ArtistTextBlock.Text = string.IsNullOrEmpty(artist) ? "Unknown Artist" : artist;
+            TitleTextBlock.Text = title ?? "Unknown Title";
+            ArtistTextBlock.Text = artist ?? "Unknown Artist";
 
             // Обновляем иконку Play/Pause
             PlayPauseIcon.Symbol = status == MediaPlaybackStatus.Playing ? SymbolRegular.Pause24 : SymbolRegular.Play24;
@@ -78,6 +80,21 @@ namespace CustomMediaRPC.Views
                 bitmap.EndInit();
             }
             CoverArtImage.Source = bitmap; // Устанавливаем загруженную (или дефолтную) картинку
+
+            // Обновление ProgressBar
+            if (totalDuration.HasValue && totalDuration.Value > TimeSpan.Zero)
+            {
+                TrackProgressBar.Maximum = totalDuration.Value.TotalSeconds;
+                TrackProgressBar.Value = currentPosition.HasValue ? currentPosition.Value.TotalSeconds : 0;
+                TrackProgressBar.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                // Скрыть ProgressBar, если длительность неизвестна
+                TrackProgressBar.Visibility = Visibility.Collapsed;
+                TrackProgressBar.Value = 0; 
+                TrackProgressBar.Maximum = 100; // Сброс на всякий случай
+            }
         }
         
         // Метод для установки свойства AlwaysOnTop

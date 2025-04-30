@@ -73,6 +73,7 @@ public class MediaStateManager
             DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] BuildRichPresenceAsync called for session: {session.SourceAppUserModelId}");
             var playbackInfo = session.GetPlaybackInfo();
             var mediaProperties = await session.TryGetMediaPropertiesAsync();
+            var mediaTimeline = session.GetTimelineProperties();
 
             if (mediaProperties == null)
             {
@@ -83,6 +84,10 @@ public class MediaStateManager
             DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Fetched session properties.");
             DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] MediaProperties - Title: '{mediaProperties.Title}', Artist: '{mediaProperties.Artist}', Album: '{mediaProperties.AlbumTitle}'");
             DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] PlaybackInfo - Status: {playbackInfo?.PlaybackStatus}");
+
+            // Получаем позицию и длительность из таймлайна
+            var currentPosition = mediaTimeline?.Position;
+            var totalDuration = mediaTimeline?.EndTime; // EndTime обычно представляет общую длительность
 
             var newState = new MediaState
             {
@@ -96,11 +101,14 @@ public class MediaStateManager
                     GlobalSystemMediaTransportControlsSessionPlaybackStatus.Paused => MediaPlaybackStatus.Paused,
                     _ => MediaPlaybackStatus.Stopped
                 },
+                CurrentPosition = currentPosition, // Сохраняем позицию
+                TotalDuration = totalDuration,     // Сохраняем длительность
                 CoverArtThumbnail = mediaProperties.Thumbnail // Сохраняем миниатюру
             };
 
             Debug.WriteLine($"BuildRichPresenceAsync: Created new state from session: {newState}");
             Debug.WriteLine($"BuildRichPresenceAsync: Thumbnail present: {newState.CoverArtThumbnail != null}"); // Логируем наличие миниатюры
+            Debug.WriteLine($"BuildRichPresenceAsync: Timeline: Pos={currentPosition}, End={totalDuration}"); // Логируем время
 
             // Сравниваем новое состояние с текущим
             var now = DateTime.UtcNow;
@@ -244,17 +252,16 @@ public class MediaStateManager
 
             // --- Новая логика создания Timestamps на основе TimelineProperties ---
             Timestamps? timestamps = null;
-            var timelineProperties = session.GetTimelineProperties();
 
-            if (playbackInfo?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing && timelineProperties != null)
+            if (playbackInfo?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing && mediaTimeline != null)
             {
-                var position = timelineProperties.Position;
+                var position = mediaTimeline.Position;
                 var startTimeForDiscord = now - position;
                 DateTime? endTimeForDiscord = null;
 
-                if (timelineProperties.EndTime > TimeSpan.Zero)
+                if (mediaTimeline.EndTime > TimeSpan.Zero)
                 {
-                    endTimeForDiscord = startTimeForDiscord + timelineProperties.EndTime;
+                    endTimeForDiscord = startTimeForDiscord + mediaTimeline.EndTime;
                 }
 
                 timestamps = new Timestamps
@@ -291,6 +298,21 @@ public class MediaStateManager
 
             var finalElapsedMs = stopwatch.ElapsedMilliseconds;
             DebugLogger.Log($"[BUILD {finalElapsedMs}ms] BuildRichPresenceAsync finished successfully. Total time: {finalElapsedMs - initialElapsedMs}ms");
+
+            // Обновляем Floating Player, если он активен
+            if (_settings.EnableFloatingPlayer && _currentState != null)
+            {
+                FloatingPlayerService.Instance.UpdateContent(
+                    _currentState.GetDisplayTitle(), 
+                    _currentState.Artist ?? "Unknown Artist", 
+                    _currentState.Status, 
+                    _currentState.CoverArtThumbnail, 
+                    _currentState.CurrentPosition, 
+                    _currentState.TotalDuration
+                );
+            }
+
+            DebugLogger.Log("[BUILD] Finished BuildRichPresenceAsync");
             return presence;
         }
         catch (OperationCanceledException)
