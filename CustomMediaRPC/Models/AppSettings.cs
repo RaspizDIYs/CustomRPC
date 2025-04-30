@@ -5,7 +5,8 @@ namespace CustomMediaRPC.Models;
 
 public class AppSettings : INotifyPropertyChanged
 {
-    private bool _loadSpotifyCover = true;
+    private bool _enableCoverArtFetching = true;
+    private string _coverArtSource = "Spotify";
     private bool _useCustomDefaultCover;
     private string _customDefaultCoverUrl = string.Empty;
     private string _lastFmApiKey = string.Empty;
@@ -15,10 +16,16 @@ public class AppSettings : INotifyPropertyChanged
     private bool _connectOnStartup;
     private bool _autoDetectGame = true; // Existing setting, assuming default is true
 
-    public bool LoadSpotifyCover
+    public bool EnableCoverArtFetching
     {
-        get => _loadSpotifyCover;
-        set => SetField(ref _loadSpotifyCover, value);
+        get => _enableCoverArtFetching;
+        set => SetField(ref _enableCoverArtFetching, value);
+    }
+
+    public string CoverArtSource
+    {
+        get => _coverArtSource;
+        set => SetField(ref _coverArtSource, value);
     }
 
     public bool UseCustomDefaultCover

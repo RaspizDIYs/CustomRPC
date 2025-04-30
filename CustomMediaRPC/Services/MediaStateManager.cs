@@ -12,6 +12,7 @@ namespace CustomMediaRPC.Services;
 public class MediaStateManager
 {
     private readonly SpotifyService _spotifyService;
+    private readonly DeezerService _deezerService;
     private readonly AppSettings _settings;
     private MediaState _currentState;
     private string? _selectedSourceAppId;
@@ -25,12 +26,13 @@ public class MediaStateManager
     // Делаем публичное свойство для доступа к времени старта трека
     public DateTime? CurrentTrackStartTime => _currentTrackStartTime;
 
-    public MediaStateManager(SpotifyService spotifyService, AppSettings settings)
+    public MediaStateManager(SpotifyService spotifyService, DeezerService deezerService, AppSettings settings)
     {
         _spotifyService = spotifyService ?? throw new ArgumentNullException(nameof(spotifyService));
+        _deezerService = deezerService ?? throw new ArgumentNullException(nameof(deezerService));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _currentState = new MediaState();
-        DebugLogger.Log($"MediaStateManager initialized with SpotifyService: {spotifyService.GetHashCode()}");
+        DebugLogger.Log($"MediaStateManager initialized with SpotifyService: {spotifyService.GetHashCode()}, DeezerService: {deezerService.GetHashCode()}");
     }
 
     public string? SelectedSourceAppId
@@ -55,15 +57,19 @@ public class MediaStateManager
 
     public MediaState CurrentState => _currentState;
 
-    public async Task<RichPresence?> BuildRichPresenceAsync(GlobalSystemMediaTransportControlsSession session)
+    public async Task<RichPresence?> BuildRichPresenceAsync(GlobalSystemMediaTransportControlsSession session, Stopwatch? stopwatch = null)
     {
+        stopwatch ??= Stopwatch.StartNew(); // Если stopwatch не передан, начинаем свой
+        var initialElapsedMs = stopwatch.ElapsedMilliseconds;
+        DebugLogger.Log($"[BUILD {initialElapsedMs}ms] BuildRichPresenceAsync started.");
+
         CancelPreviousPresenceBuild();
         _presenceBuildCts = new CancellationTokenSource();
         var cancellationToken = _presenceBuildCts.Token;
         
         try
         {
-            DebugLogger.Log($"BuildRichPresenceAsync called for session: {session.SourceAppUserModelId}");
+            DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] BuildRichPresenceAsync called for session: {session.SourceAppUserModelId}");
             var playbackInfo = session.GetPlaybackInfo();
             var mediaProperties = await session.TryGetMediaPropertiesAsync();
 
@@ -73,8 +79,9 @@ public class MediaStateManager
                 return null;
             }
 
-            DebugLogger.Log($"BuildRichPresenceAsync: MediaProperties - Title: '{mediaProperties.Title}', Artist: '{mediaProperties.Artist}', Album: '{mediaProperties.AlbumTitle}'");
-            DebugLogger.Log($"BuildRichPresenceAsync: PlaybackInfo - Status: {playbackInfo?.PlaybackStatus}");
+            DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Fetched session properties.");
+            DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] MediaProperties - Title: '{mediaProperties.Title}', Artist: '{mediaProperties.Artist}', Album: '{mediaProperties.AlbumTitle}'");
+            DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] PlaybackInfo - Status: {playbackInfo?.PlaybackStatus}");
 
             var newState = new MediaState
             {
@@ -96,7 +103,7 @@ public class MediaStateManager
             var now = DateTime.UtcNow;
             if (!AreStatesEqual(_currentState, newState))
             {
-                Debug.WriteLine($"BuildRichPresenceAsync: State changed! Previous: {_currentState}, New: {newState}. Time since last change: {(now - _lastStateChangeTime).TotalMilliseconds}ms");
+                Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] State changed! Previous: {_currentState}, New: {newState}. Time since last change: {(now - _lastStateChangeTime).TotalMilliseconds}ms");
                 _currentState = newState;
                 _lastSentPresence = null;
                 _lastStateChangeTime = now;
@@ -105,28 +112,28 @@ public class MediaStateManager
                 if (_currentState.Status == MediaPlaybackStatus.Playing)
                 {
                     _currentTrackStartTime = now; // Запоминаем время начала
-                    Debug.WriteLine($"BuildRichPresenceAsync: Track started playing. StartTime set to {_currentTrackStartTime}");
+                    Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Track started playing. StartTime set to {_currentTrackStartTime}");
                 }
                 else
                 {
                     _currentTrackStartTime = null; // Сбрасываем время, если не играет
-                    Debug.WriteLine("BuildRichPresenceAsync: Track is not playing. StartTime reset.");
+                    Debug.WriteLine("[BUILD {stopwatch.ElapsedMilliseconds}ms] Track is not playing. StartTime reset.");
                 }
                 // ----------------------------------------
             }
             else
             {
-                Debug.WriteLine($"BuildRichPresenceAsync: State hasn't changed. Current: {_currentState}. Time since last change: {(now - _lastStateChangeTime).TotalMilliseconds}ms");
+                Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] State hasn't changed. Current: {_currentState}. Time since last change: {(now - _lastStateChangeTime).TotalMilliseconds}ms");
                 // Если состояние не изменилось, нет смысла пересоздавать presence,
                 // но мы должны вернуть _lastSentPresence, если он есть, чтобы ShouldUpdatePresence мог работать корректно
                  // Если _lastSentPresence не null, значит мы уже успешно отправляли это состояние
                 // Если null, значит состояние хоть и не изменилось, но мы его еще не отправляли (например, после сброса)
                 // В этом случае нужно все равно построить presence
                 if (_lastSentPresence != null) {
-                     Debug.WriteLine($"BuildRichPresenceAsync: Returning cached presence as state hasn't changed.");
+                     Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Returning cached presence as state hasn't changed.");
                      return _lastSentPresence;
                 }
-                 Debug.WriteLine($"BuildRichPresenceAsync: State unchanged but no cached presence, proceeding to build.");
+                 Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] State unchanged but no cached presence, proceeding to build.");
 
             }
 
@@ -136,73 +143,89 @@ public class MediaStateManager
             string largeImageUrl = GetDefaultImageUrl();
             string largeImageText = _currentState.Album ?? _currentState.Title ?? string.Empty;
 
-            // Пытаемся получить информацию об обложке из Spotify, если включено
-            if (_settings.LoadSpotifyCover && 
+            // Пытаемся получить информацию об обложке, если включено
+            if (_settings.EnableCoverArtFetching && 
                 !string.IsNullOrWhiteSpace(_currentState.Artist) && 
                 !string.IsNullOrWhiteSpace(_currentState.Title) && 
                 _currentState.Artist != Constants.Media.UNKNOWN_ARTIST &&
                 _currentState.Title != Constants.Media.UNKNOWN_TITLE)
             {
-                 Debug.WriteLine($"BuildRichPresenceAsync: Attempting to fetch album art from Spotify for Artist='{_currentState.Artist}', Track='{_currentState.Title}', Album='{_currentState.Album ?? "N/A"}'");
-                 
+                 AlbumArtInfo? albumArtInfo = null;
+                 string selectedSource = _settings.CoverArtSource ?? "Spotify"; // Источник по умолчанию - Spotify
+                 DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Attempting to fetch album art from {selectedSource}...");
                  cancellationToken.ThrowIfCancellationRequested();
-                 var albumArtInfo = await _spotifyService.GetAlbumArtInfoAsync(_currentState.Artist, _currentState.Title, _currentState.Album, cancellationToken);
-                
-                 if (cancellationToken.IsCancellationRequested) {
-                    Debug.WriteLine("BuildRichPresenceAsync: Spotify fetch cancelled after call.");
-                    return null;
-                 }
 
-                if (!string.IsNullOrEmpty(albumArtInfo?.ImageUrl))
-                {
-                    largeImageUrl = albumArtInfo.ImageUrl; 
-                    largeImageText = albumArtInfo.AlbumTitle ?? _currentState.Album ?? _currentState.Title ?? string.Empty;
-                    Debug.WriteLine($"BuildRichPresenceAsync: Found album art via Spotify: {largeImageUrl}, Album: {albumArtInfo.AlbumTitle ?? "Unknown"}");
-                }
-                else
-                {
-                    // Если Spotify включен, но не нашел картинку, используем дефолт (custom или hardcoded)
-                    // largeImageUrl уже содержит результат GetDefaultImageUrl()
-                    if (albumArtInfo?.AlbumTitle != null)
+                 try
+                 {
+                    if (selectedSource.Equals("Deezer", StringComparison.OrdinalIgnoreCase))
                     {
-                         largeImageText = albumArtInfo.AlbumTitle; 
-                        Debug.WriteLine($"BuildRichPresenceAsync: Spotify found album info ('{albumArtInfo.AlbumTitle}') but no suitable image URL. Using default image.");
+                        // Передаем stopwatch в DeezerService
+                        albumArtInfo = await _deezerService.GetAlbumArtInfoAsync(_currentState.Artist, _currentState.Title, _currentState.Album, stopwatch, cancellationToken);
                     }
-                    else
+                    else // По умолчанию используем Spotify
+                    {
+                         // Передаем stopwatch в SpotifyService
+                        albumArtInfo = await _spotifyService.GetAlbumArtInfoAsync(_currentState.Artist, _currentState.Title, _currentState.Album, stopwatch, cancellationToken);
+                    }
+                 }
+                 catch (Exception serviceEx)
+                 {
+                      DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Error fetching cover art from {selectedSource}", serviceEx);
+                      albumArtInfo = null; // Считаем, что обложку не получили
+                 }
+                 
+                 DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] {selectedSource} fetch finished (Cancelled: {cancellationToken.IsCancellationRequested}). Found image: {!string.IsNullOrEmpty(albumArtInfo?.ImageUrl)}");
+
+                 if (cancellationToken.IsCancellationRequested)
+                 {
+                     DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Cover art fetch was cancelled after call.");
+                 }
+                 else if (albumArtInfo != null) // Обрабатываем результат, если не отменено
+                 {
+                    if (!string.IsNullOrEmpty(albumArtInfo.ImageUrl))
+                    {
+                        largeImageUrl = albumArtInfo.ImageUrl; 
+                        largeImageText = albumArtInfo.AlbumTitle ?? _currentState.Album ?? _currentState.Title ?? string.Empty;
+                        DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Used album art from {selectedSource}: {largeImageUrl}");
+                    }
+                    else if (albumArtInfo.AlbumTitle != null) // Нашли только название альбома
                     {   
-                        largeImageText = _currentState.Album ?? _currentState.Title ?? string.Empty; 
-                        Debug.WriteLine("BuildRichPresenceAsync: No album art or info found via Spotify. Using default image.");
+                        largeImageText = albumArtInfo.AlbumTitle; 
+                         DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] {selectedSource} found album info ('{albumArtInfo.AlbumTitle}') but no image. Using default image URL with {selectedSource} album title.");
+                    } 
+                    else 
+                    {
+                         DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] {selectedSource} returned null info. Using default image/text.");
                     }
-                }
+                 }
+                 // Если albumArtInfo == null (и не отменено), значит сервис вернул null (ошибка или не найдено)
             }
             else
             {
-                 Debug.WriteLine($"BuildRichPresenceAsync: Skipping Spotify lookup (disabled in settings or Artist/Title is missing/unknown). Using default image.");
-                 // largeImageUrl уже содержит результат GetDefaultImageUrl()
-                 largeImageText = _currentState.Album ?? _currentState.Title ?? string.Empty;
+                 DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Skipping Cover Art lookup (disabled or missing info).");
             }
 
             // --- Проверка длины largeImageText --- 
             if (largeImageText.Length < 2)
             {
-                 Debug.WriteLine($"BuildRichPresenceAsync: Initial largeImageText ('{largeImageText}') is too short (< 2 chars).");
+                 Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Initial largeImageText ('{largeImageText}') is too short (< 2 chars).");
                  // Пытаемся использовать название трека
                  if (!string.IsNullOrEmpty(_currentState.Title) && _currentState.Title.Length >= 2)
                  {
                      largeImageText = _currentState.Title;
-                     Debug.WriteLine($"BuildRichPresenceAsync: Falling back to Title: '{largeImageText}'");
+                     Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Falling back to Title: '{largeImageText}'");
                  }
                  // Если трек тоже короткий или пустой, используем Details (Artist - Title)
                  else if (!string.IsNullOrEmpty(detailsText) && detailsText.Length >= 2)
                  {
                      largeImageText = detailsText;
-                     Debug.WriteLine($"BuildRichPresenceAsync: Falling back to Details: '{largeImageText}'");
+                     Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Falling back to Details: '{largeImageText}'");
                  }
                  // В крайнем случае, используем дефолт
                  else
                  {
                      largeImageText = "Album Art"; 
-                     Debug.WriteLine($"BuildRichPresenceAsync: Falling back to default 'Album Art'");
+                     Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Falling back to default 'Album Art'");
                  }
             }
             // --- Конец проверки длины --- 
@@ -226,20 +249,22 @@ public class MediaStateManager
                         Start = _currentTrackStartTime.Value,
                         End = endTimeUtc
                     };
-                    Debug.WriteLine($"BuildRichPresenceAsync: Setting timestamps Start={timestamps.Start}, End={timestamps.End} (Duration: {duration})");
+                    Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Setting timestamps Start={timestamps.Start}, End={timestamps.End} (Duration: {duration})");
                 }
                 else
                 {
                     // Если длительность неизвестна, ставим только время начала
                     timestamps = new Timestamps { Start = _currentTrackStartTime.Value };
-                    Debug.WriteLine($"BuildRichPresenceAsync: Setting timestamp Start={timestamps.Start} (End time unavailable)");
+                    Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Setting timestamp Start={timestamps.Start} (End time unavailable)");
                 }
             }
             else
             {
-                 Debug.WriteLine("BuildRichPresenceAsync: Not setting timestamps (not playing or startTime is null).");
+                 Debug.WriteLine("[BUILD {stopwatch.ElapsedMilliseconds}ms] Not setting timestamps (not playing or startTime is null).");
             }
             // ---------------------------
+
+            DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Timestamps created/checked.");
 
             var presence = new RichPresence
             {
@@ -254,51 +279,57 @@ public class MediaStateManager
                 Timestamps = timestamps
             };
 
-            Debug.WriteLine($"BuildRichPresenceAsync: Created presence - Details: '{safeDetails}', State: '{safeState}', ImageKey: '{largeImageUrl}', ImageText: '{safeLargeImageText}'");
-            Debug.WriteLine($"BuildRichPresenceAsync: Successfully built new presence: {presence}");
+            Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] BuildRichPresenceAsync: Created presence - Details: '{safeDetails}', State: '{safeState}', ImageKey: '{largeImageUrl}', ImageText: '{safeLargeImageText}'");
+            Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] BuildRichPresenceAsync: Successfully built new presence: {presence}");
+
+            var finalElapsedMs = stopwatch.ElapsedMilliseconds;
+            DebugLogger.Log($"[BUILD {finalElapsedMs}ms] BuildRichPresenceAsync finished successfully. Total time: {finalElapsedMs - initialElapsedMs}ms");
             return presence;
         }
         catch (OperationCanceledException)
         {
-            Debug.WriteLine("BuildRichPresenceAsync: Operation was cancelled.");
+             DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] BuildRichPresenceAsync: Operation was cancelled.");
             return null;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"BuildRichPresenceAsync Error: {ex.Message}");
+             DebugLogger.Log($"[BUILD {stopwatch.ElapsedMilliseconds}ms] BuildRichPresenceAsync Error", ex);
             return null;
         }
         finally
         {
-             // Не сбрасываем CTS здесь, чтобы IsCancellationRequested работала
-             // Он сбросится при следующем вызове BuildRichPresenceAsync или при Disconnect
+             // Не останавливаем stopwatch здесь, он управляется вызывающим кодом
         }
     }
 
-    public bool ShouldUpdatePresence(RichPresence? newPresence)
+    public bool ShouldUpdatePresence(RichPresence? newPresence, Stopwatch? stopwatch = null)
     {
+        stopwatch ??= Stopwatch.StartNew();
+        DebugLogger.Log($"[SHOULD {stopwatch.ElapsedMilliseconds}ms] ShouldUpdatePresence called.");
+
         if (newPresence == null)
         {
-            Debug.WriteLine("ShouldUpdatePresence: New presence is null");
+            DebugLogger.Log($"[SHOULD {stopwatch.ElapsedMilliseconds}ms] ShouldUpdatePresence: New presence is null. -> FALSE");
             return false;
         }
 
         var now = DateTime.UtcNow;
-        if (now - _lastPresenceUpdateTime < _presenceUpdateThrottle)
-        {
-            Debug.WriteLine($"ShouldUpdatePresence: Throttled, last update was {(now - _lastPresenceUpdateTime).TotalMilliseconds}ms ago");
-            return false;
-        }
+        // Убираем троттлинг по времени, т.к. Discord сам имеет rate limit, а нам важнее скорость первого обновления
+        // if (now - _lastPresenceUpdateTime < _presenceUpdateThrottle)
+        // {
+        //     DebugLogger.Log($"[SHOULD {stopwatch.ElapsedMilliseconds}ms] ShouldUpdatePresence: Throttled. -> FALSE");
+        //     return false;
+        // }
 
         if (AreRichPresenceEqual(newPresence, _lastSentPresence))
         {
-            Debug.WriteLine($"ShouldUpdatePresence: Presence hasn't changed (compared to last sent). Details: {newPresence.Details}");
+            DebugLogger.Log($"[SHOULD {stopwatch.ElapsedMilliseconds}ms] ShouldUpdatePresence: Presence hasn't changed. -> FALSE");
             return false;
         }
 
-        Debug.WriteLine($"ShouldUpdatePresence: Presence has changed or needs update. Throttled: {now - _lastPresenceUpdateTime < _presenceUpdateThrottle}. Old: {_lastSentPresence?.Details ?? "null"}, New: {newPresence.Details}");
-        _lastPresenceUpdateTime = now;
-        _lastSentPresence = newPresence;
+         DebugLogger.Log($"[SHOULD {stopwatch.ElapsedMilliseconds}ms] ShouldUpdatePresence: Presence changed or needs update. -> TRUE");
+        _lastPresenceUpdateTime = now; // Обновляем время последнего *успешного* обновления
+        _lastSentPresence = newPresence; // Сохраняем то, что собираемся отправить
         return true;
     }
 

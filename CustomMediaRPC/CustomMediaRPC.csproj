@@ -29,6 +29,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="VkNet" Version="1.78.0" />
     <PackageReference Include="WPF-UI" Version="4.0.2" />
   </ItemGroup>
   <ItemGroup>

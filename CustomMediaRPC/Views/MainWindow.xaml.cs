@@ -54,6 +54,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private MediaStateManager? _mediaStateManager;
     private HttpClient? _sharedHttpClient;
     private SpotifyService? _spotifyService;
+    private DeezerService? _deezerService;
 
     private GlobalSystemMediaTransportControlsSessionManager? _sessionManager;
     private GlobalSystemMediaTransportControlsSession? _currentSession;
@@ -63,7 +64,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private bool _isUpdatingSessionList = false;
 
     private DispatcherTimer? _presenceUpdateDebounceTimer;
-    private const int DebounceMilliseconds = 300;
+    private const int DebounceMilliseconds = 100;
 
     private ApplicationTheme _currentAppTheme;
 
@@ -158,8 +159,9 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
         // --- Инициализируем HttpClient и сервисы, используя раскодированные ключи и настройки ---
         _sharedHttpClient = new HttpClient();
-        _spotifyService = new SpotifyService(_appSettings); // Передаем настройки
-        _mediaStateManager = new MediaStateManager(_spotifyService, _appSettings); // Передаем настройки
+        _spotifyService = new SpotifyService(_appSettings);
+        _deezerService = new DeezerService(_appSettings);
+        _mediaStateManager = new MediaStateManager(_spotifyService, _deezerService, _appSettings);
         // --------------------------------------------------------------------------
 
         Dispatcher.InvokeAsync(InitializeMediaIntegration);
@@ -219,13 +221,8 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             {
                 DebugLogger.Log($"Received Ready from user {e.User.Username}");
                 _isRpcConnected = true;
-
-                // Сбрасываем последнее отправленное состояние при переподключении
                 _mediaStateManager?.SetLastSentPresence(null);
-
-                // Немедленно пытаемся обновить статус из текущего состояния
                 await UpdatePresenceFromSession();
-
                 UpdateStatusText($"Connected as {e.User.Username}");
                 UpdateButtonStates();
                 DebugLogger.Log("OnReady Dispatcher actions completed successfully.");
@@ -234,7 +231,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
         _client.OnPresenceUpdate += (sender, e) =>
         {
-            DebugLogger.Log($"Presence updated!");
+            DebugLogger.Log($"[DISCORD ---ms] Presence updated callback received!");
         };
 
         _client.OnError += (sender, e) => {
@@ -543,8 +540,9 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             if (sender is DispatcherTimer timer)
             {
                 timer.Stop();
-                DebugLogger.Log("Debounce timer elapsed. Calling UpdatePresenceFromSession...");
-                await UpdatePresenceFromSession();
+                var stopwatch = Stopwatch.StartNew();
+                DebugLogger.Log($"[TIMER {stopwatch.ElapsedMilliseconds}ms] Debounce timer elapsed. Calling UpdatePresenceFromSession...");
+                await UpdatePresenceFromSession(stopwatch);
             }
         };
     }
@@ -555,14 +553,14 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
         _presenceUpdateDebounceTimer.Stop();
         _presenceUpdateDebounceTimer.Start();
-        DebugLogger.Log($"Requested presence update (debounced for {DebounceMilliseconds}ms)");
+        DebugLogger.Log($"[TIMER ---ms] Requested presence update (debounced for {DebounceMilliseconds}ms)");
     }
 
     private void MediaPropertiesChangedHandler(GlobalSystemMediaTransportControlsSession? sender, MediaPropertiesChangedEventArgs? args)
     {
         if (sender != null && _currentSession != null && sender.SourceAppUserModelId == _currentSession.SourceAppUserModelId)
         {
-            DebugLogger.Log($"MediaPropertiesChangedHandler: Properties changed for {sender.SourceAppUserModelId}");
+            DebugLogger.Log($"[EVENT ---ms] MediaPropertiesChangedHandler: Properties changed for {sender.SourceAppUserModelId}");
             RequestPresenceUpdateDebounced();
         }
     }
@@ -571,64 +569,63 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     {
         if (sender != null && _currentSession != null && sender.SourceAppUserModelId == _currentSession.SourceAppUserModelId)
         {
-            DebugLogger.Log($"PlaybackInfoChangedHandler: Playback info changed for {sender.SourceAppUserModelId}");
+            DebugLogger.Log($"[EVENT ---ms] PlaybackInfoChangedHandler: Playback info changed for {sender.SourceAppUserModelId}");
             RequestPresenceUpdateDebounced();
         }
     }
 
-    private async Task UpdatePresenceFromSession()
+    private async Task UpdatePresenceFromSession(Stopwatch? stopwatch = null)
     {
         if (!_isRpcConnected || _client == null || !_client.IsInitialized || _mediaStateManager == null || _spotifyService == null)
         {
-            DebugLogger.Log($"UpdatePresenceFromSession skipped: Preconditions not met (RPC Connected: {_isRpcConnected}, Client Valid: {_client != null && _client.IsInitialized}, StateManager Valid: {_mediaStateManager != null}, SpotifyService Valid: {_spotifyService != null})");
+            DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] UpdatePresenceFromSession skipped: Preconditions not met (RPC Connected: {_isRpcConnected}, Client Valid: {_client != null && _client.IsInitialized}, StateManager Valid: {_mediaStateManager != null}, SpotifyService Valid: {_spotifyService != null})");
             return;
         }
 
         if (_currentSession == null)
         {
-            DebugLogger.Log("UpdatePresenceFromSession: Clearing presence because current session is null");
+            DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] UpdatePresenceFromSession: Clearing presence because current session is null");
             _client.ClearPresence();
             UpdateStatusText("No media source selected or active.");
             return;
         }
 
-        DebugLogger.Log($"UpdatePresenceFromSession started for session: {_currentSession.SourceAppUserModelId}");
+        DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] UpdatePresenceFromSession started for session: {_currentSession.SourceAppUserModelId}");
 
         try
         {
-             // --- УПРОЩЕННАЯ ЛОГИКА --- 
-             // Всегда вызываем BuildRichPresenceAsync, он сам разберется с кешем Spotify
-             RichPresence? newPresence = await _mediaStateManager.BuildRichPresenceAsync(_currentSession); 
+            DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] Calling BuildRichPresenceAsync...");
+            RichPresence? newPresence = await _mediaStateManager.BuildRichPresenceAsync(_currentSession, stopwatch);
+            DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] BuildRichPresenceAsync finished.");
 
             if (newPresence == null)
             {
-                DebugLogger.Log("UpdatePresenceFromSession: BuildRichPresenceAsync returned null");
-                // Если состояние неизвестно (например, только запустили и нет данных), чистим presence
-                if (_mediaStateManager.CurrentState.IsUnknown) 
+                DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] UpdatePresenceFromSession: BuildRichPresenceAsync returned null");
+                if (_mediaStateManager.CurrentState.IsUnknown)
                 {
-                    DebugLogger.Log("UpdatePresenceFromSession: Current state is Unknown, clearing presence.");
+                    DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] UpdatePresenceFromSession: Current state is Unknown, clearing presence.");
                     _client.ClearPresence();
                     UpdateStatusText("Waiting for media info...");
                 }
-                // Если не null, но состояние не Unknown (например, Stopped), то presence был построен, но может быть ShouldUpdatePresence вернет false
                 return;
             }
 
-            if (_mediaStateManager.ShouldUpdatePresence(newPresence))
+            DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] Calling ShouldUpdatePresence...");
+            if (_mediaStateManager.ShouldUpdatePresence(newPresence, stopwatch))
             {
-                DebugLogger.Log("Presence data changed. Calling _client.SetPresence...");
+                DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] Presence data changed. Calling _client.SetPresence...");
                 _client.SetPresence(newPresence);
-                DebugLogger.Log("SetPresence called successfully");
+                DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] SetPresence called successfully. Waiting for OnPresenceUpdate callback...");
                 UpdateStatusText($"{newPresence.Details} - {newPresence.State}");
             }
             else
             {
-                DebugLogger.Log("Presence data hasn't changed. Skipping SetPresence call");
+                DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] Presence data hasn't changed. Skipping SetPresence call");
             }
         }
         catch (Exception ex)
         {
-            DebugLogger.Log($"Error updating presence", ex);
+            DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] Error updating presence", ex);
             UpdateStatusText("Error updating presence.");
         }
     }
@@ -698,7 +695,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             if (_isRpcConnected)
             {
                 DebugLogger.Log("SwitchToSession: Requesting presence update for the new session...");
-                RequestPresenceUpdateDebounced();
+                Dispatcher.InvokeAsync(() => UpdatePresenceFromSession());
             }
             DebugLogger.Log($"Switched to session: {newSessionId}");
         }
@@ -810,9 +807,17 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             
             // Блокируем выбор источника и настройки после подключения
             SessionComboBox.IsEnabled = !_isRpcConnected;
-            SettingsGroup.IsEnabled = !_isRpcConnected;
+            // SettingsGroup.IsEnabled = !_isRpcConnected; // Удаляем старую строку
+
+            // Блокируем отдельные элементы управления настройками
+            bool settingsEnabled = !_isRpcConnected;
+            EnableCoverArtCheckBox.IsEnabled = settingsEnabled;
+            // ComboBox активен только если включен чекбокс EnableCoverArtCheckBox И настройки активны
+            CoverArtSourceComboBox.IsEnabled = settingsEnabled && (EnableCoverArtCheckBox.IsChecked == true);
+            UseCustomCoverCheckBox.IsEnabled = settingsEnabled;
+            CustomCoverUrlTextBox.IsEnabled = settingsEnabled; // Видимость управляется отдельно, но доступность тоже блокируем
             
-            DebugLogger.Log($"UpdateButtonStates: sourceSelected={sourceSelected}, _isRpcConnected={_isRpcConnected}, canConnect={canConnect}, canDisconnect={canDisconnect}, SessionComboBox.IsEnabled={SessionComboBox.IsEnabled}, SettingsGroup.IsEnabled={SettingsGroup.IsEnabled}");
+            DebugLogger.Log($"UpdateButtonStates: sourceSelected={sourceSelected}, _isRpcConnected={_isRpcConnected}, canConnect={canConnect}, canDisconnect={canDisconnect}, SessionComboBox.IsEnabled={SessionComboBox.IsEnabled}, SettingsEnabled={settingsEnabled}");
         });
     }
 

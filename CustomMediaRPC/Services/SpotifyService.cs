@@ -6,6 +6,8 @@ using CustomMediaRPC.Models; // Понадобится для AlbumArtInfo
 using CustomMediaRPC.Utils; // Понадобится для Constants
 using SpotifyAPI.Web; // Добавили через NuGet
 using System.Threading; // Добавлено для CancellationToken
+using System.Net.Http; // <-- Добавляем для HttpClient
+using SpotifyAPI.Web.Http; // <-- Добавляем для IHTTPClient и NetHttpClient
 
 namespace CustomMediaRPC.Services
 {
@@ -24,6 +26,13 @@ namespace CustomMediaRPC.Services
         private static readonly TimeSpan _cacheDuration = TimeSpan.FromMinutes(Constants.LastFm.CACHE_DURATION_MINUTES); // Используем константу из LastFm для начала
         private static readonly TimeSpan _notFoundCacheDuration = TimeSpan.FromMinutes(15); // Как в LastFm
         private SemaphoreSlim _clientInitSemaphore = new SemaphoreSlim(1, 1); // Для безопасной инициализации клиента
+
+        // Статический HttpClient для переиспользования
+        // Устанавливаем разумный таймаут
+        private static readonly HttpClient _httpClient = new HttpClient()
+        {
+             Timeout = TimeSpan.FromSeconds(3) // <-- Таймаут 3 секунды
+        };
 
         public SpotifyService(AppSettings settings) // Добавили AppSettings
         {
@@ -74,7 +83,14 @@ namespace CustomMediaRPC.Services
                 if (_spotifyClient != null) return; // Еще одна проверка внутри лока
 
                 DebugLogger.Log("SpotifyService: Initializing SpotifyClient...");
-                var config = SpotifyClientConfig.CreateDefault();
+
+                // Создаем IHTTPClient с нашим HttpClient
+                IHTTPClient spotifyHttpClient = new NetHttpClient(_httpClient);
+
+                // Создаем конфиг и передаем ему наш IHTTPClient
+                var config = SpotifyClientConfig.CreateDefault()
+                    .WithHTTPClient(spotifyHttpClient);
+
                 // Используем константы вместо _settings
                 var request = new ClientCredentialsRequest(SpotifyClientId, SpotifyClientSecret);
                 
@@ -99,6 +115,10 @@ namespace CustomMediaRPC.Services
             catch (Exception ex)
             {
                 DebugLogger.Log($"SpotifyService Error: Failed to initialize SpotifyClient: {ex.Message}");
+                // Проверяем, не связана ли ошибка с таймаутом HttpClient
+                if (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested) {
+                    DebugLogger.Log("SpotifyService: Initialization likely failed due to HttpClient timeout.");
+                }
                 _spotifyClient = null; // Убедимся, что клиент не используется, если инициализация не удалась
             }
             finally
@@ -107,11 +127,20 @@ namespace CustomMediaRPC.Services
             }
         }
 
-        public async Task<AlbumArtInfo?> GetAlbumArtInfoAsync(string artist, string track, string? album, CancellationToken cancellationToken = default) // Добавили CancellationToken
+        public async Task<AlbumArtInfo?> GetAlbumArtInfoAsync(
+            string artist, 
+            string track, 
+            string? album, 
+            Stopwatch? stopwatch = null,
+            CancellationToken cancellationToken = default)
         {
-             if (string.IsNullOrWhiteSpace(artist) || string.IsNullOrWhiteSpace(track))
+            stopwatch ??= Stopwatch.StartNew(); // Если не передан, создаем свой
+            var initialElapsedMs = stopwatch.ElapsedMilliseconds;
+            DebugLogger.Log($"[SPOTIFY {initialElapsedMs}ms] GetAlbumArtInfoAsync called for Artist: '{artist}', Track: '{track}'.");
+
+            if (string.IsNullOrWhiteSpace(artist) || string.IsNullOrWhiteSpace(track))
             {
-                DebugLogger.Log("SpotifyService Skip: Artist or track is empty.");
+                DebugLogger.Log($"[SPOTIFY {stopwatch.ElapsedMilliseconds}ms] Skip: Artist or track is empty.");
                 return null;
             }
             
@@ -125,22 +154,24 @@ namespace CustomMediaRPC.Services
             // Проверяем кеш еще раз перед async вызовом (на случай если между TryGet и этим вызовом что-то попало в кеш)
             if (_cache.TryGetValue(cacheKey, out var cached) && cached.Expiry > DateTime.UtcNow)
             {
-                DebugLogger.Log($"SpotifyService Async Cache HIT for key '{cacheKey}'. Returning cached info: {cached.Info?.ImageUrl ?? "null"}");
+                DebugLogger.Log($"[SPOTIFY {stopwatch.ElapsedMilliseconds}ms] Async Cache HIT for key '{cacheKey}'. Returning cached info.");
                 return cached.Info;
             }
 
-            DebugLogger.Log($"SpotifyService Async Cache MISS for key '{cacheKey}'. Performing API lookup.");
+            DebugLogger.Log($"[SPOTIFY {stopwatch.ElapsedMilliseconds}ms] Async Cache MISS for key '{cacheKey}'. Performing API lookup.");
             
-            cancellationToken.ThrowIfCancellationRequested(); // Проверка перед инициализацией
+            cancellationToken.ThrowIfCancellationRequested();
 
-            await InitializeClientAsync(cancellationToken); // Передаем токен
+            // Инициализация клиента (Stopwatch сюда не передаем, она быстрая или использует Semaphore)
+            await InitializeClientAsync(cancellationToken);
             if (_spotifyClient == null)
             {
-                 DebugLogger.Log("SpotifyService Error: Spotify client is not initialized. Cannot perform search.");
-                 return null; // Не можем выполнить поиск без клиента
+                 DebugLogger.Log($"[SPOTIFY {stopwatch.ElapsedMilliseconds}ms] Error: Spotify client is not initialized. Cannot perform search.");
+                 return null;
             }
 
             AlbumArtInfo? result = null;
+            long apiCallStartMs = -1, apiCallEndMs = -1; // Для замера времени API вызова
             try
             {
                 // TODO: Реализовать логику поиска в Spotify API
@@ -148,7 +179,7 @@ namespace CustomMediaRPC.Services
                 // 2. Если нашли трек, взять обложку его альбома.
                 // 3. Если `album` задан, можно попробовать найти альбом напрямую по `artist` и `album`.
 
-                DebugLogger.Log($"SpotifyService: Performing search for Artist: '{artist}', Track: '{track}', Album: '{album ?? "N/A"}'");
+                DebugLogger.Log($"[SPOTIFY {stopwatch.ElapsedMilliseconds}ms] Performing search for Artist: '{artist}', Track: '{track}', Album: '{album ?? "N/A"}'");
                 
                 // Примерный плейсхолдер поиска (нужно доработать)
                  SearchRequest searchRequest;
@@ -163,7 +194,11 @@ namespace CustomMediaRPC.Services
                      searchRequest = new SearchRequest(SearchRequest.Types.Track, $"artist:{artist} track:{track}");
                  }
 
+                 DebugLogger.Log($"[SPOTIFY {stopwatch.ElapsedMilliseconds}ms] Performing search with query: '{searchRequest.Query}', Type: {searchRequest.Type}");
+                 apiCallStartMs = stopwatch.ElapsedMilliseconds;
                  var searchResponse = await _spotifyClient.Search.Item(searchRequest, cancellationToken);
+                 apiCallEndMs = stopwatch.ElapsedMilliseconds;
+                 DebugLogger.Log($"[SPOTIFY {apiCallEndMs}ms] API Search finished. Time taken: {apiCallEndMs - apiCallStartMs}ms.");
 
                 // Обработка результатов поиска (упрощенная)
                  string? imageUrl = null;
@@ -178,7 +213,7 @@ namespace CustomMediaRPC.Services
                          imageUrl = foundAlbum.Images[0].Url; 
                      }
                      foundAlbumTitle = foundAlbum.Name;
-                     DebugLogger.Log($"SpotifyService: Found album '{foundAlbumTitle}' directly. Image: {imageUrl ?? "none"}");
+                     DebugLogger.Log($"[SPOTIFY {stopwatch.ElapsedMilliseconds}ms] Found album '{foundAlbumTitle}' directly. Image: {imageUrl ?? "none"}");
                  }
                  else if (searchResponse.Tracks?.Items != null && searchResponse.Tracks.Items.Count > 0)
                  {
@@ -189,11 +224,11 @@ namespace CustomMediaRPC.Services
                          imageUrl = foundTrack.Album.Images[0].Url; 
                      }
                      foundAlbumTitle = foundTrack.Album?.Name;
-                     DebugLogger.Log($"SpotifyService: Found track '{foundTrack.Name}', album '{foundAlbumTitle}'. Image: {imageUrl ?? "none"}");
+                     DebugLogger.Log($"[SPOTIFY {stopwatch.ElapsedMilliseconds}ms] Found track '{foundTrack.Name}', album '{foundAlbumTitle}'. Image: {imageUrl ?? "none"}");
                  }
                  else
                  {
-                     DebugLogger.Log($"SpotifyService: No results found for the search query.");
+                     DebugLogger.Log($"[SPOTIFY {stopwatch.ElapsedMilliseconds}ms] No results found for the search query.");
                  }
 
                  if (!string.IsNullOrWhiteSpace(imageUrl))
@@ -210,26 +245,42 @@ namespace CustomMediaRPC.Services
                      result = null; // Ничего не нашли
                  }
 
+                 if (result != null)
+                 {
+                     DebugLogger.Log($"[SPOTIFY {stopwatch.ElapsedMilliseconds}ms] Found result: Image={result.ImageUrl ?? "null"}, Album={result.AlbumTitle ?? "null"}");
+                 }
+                 else
+                 {
+                      DebugLogger.Log($"[SPOTIFY {stopwatch.ElapsedMilliseconds}ms] No suitable result found.");
+                 }
+
             }
             catch (OperationCanceledException)
             {
-                DebugLogger.Log("SpotifyService: API search cancelled.");
+                apiCallEndMs = stopwatch.ElapsedMilliseconds;
+                DebugLogger.Log($"[SPOTIFY {apiCallEndMs}ms] API search cancelled. Time elapsed: {(apiCallStartMs >= 0 ? apiCallEndMs - apiCallStartMs : -1)}ms");
                 result = null;
             }
             catch (APIException ex)
             {
-                 DebugLogger.Log($"SpotifyService API Error during search: {ex.Message}");
+                apiCallEndMs = stopwatch.ElapsedMilliseconds;
+                 DebugLogger.Log($"[SPOTIFY {apiCallEndMs}ms] Spotify API Error during search: {ex.Message}. Time elapsed: {(apiCallStartMs >= 0 ? apiCallEndMs - apiCallStartMs : -1)}ms");
                  // Возможно, токен истек? Попробуем обновить (но базовая Client Credentials Flow обычно долгоживущая)
                  if (ex.Response?.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                  {
                      DebugLogger.Log("SpotifyService: Unauthorized error, possibly expired token. Clearing client for reinitialization on next call.");
                      _spotifyClient = null; // Сбросим клиента, чтобы пересоздать при след. вызове
                  }
+                 // Проверяем, не связана ли ошибка с таймаутом HttpClient
+                 else if (ex.InnerException is TaskCanceledException && !cancellationToken.IsCancellationRequested) {
+                    DebugLogger.Log("SpotifyService: Search likely failed due to HttpClient timeout.");
+                 }
                  result = null;
             }
             catch (Exception ex)
             {
-                DebugLogger.Log($"SpotifyService Error during API lookup: {ex.Message}");
+                apiCallEndMs = stopwatch.ElapsedMilliseconds;
+                 DebugLogger.Log($"[SPOTIFY {apiCallEndMs}ms] Spotify Error during API lookup: {ex.Message}. Time elapsed: {(apiCallStartMs >= 0 ? apiCallEndMs - apiCallStartMs : -1)}ms");
                 result = null;
             }
 
@@ -239,8 +290,10 @@ namespace CustomMediaRPC.Services
                 : _notFoundCacheDuration; 
             var expiryTime = DateTime.UtcNow.Add(cacheDuration);
             _cache[cacheKey] = (result, expiryTime);
-            DebugLogger.Log($"SpotifyService Cached result for key '{cacheKey}' with expiry {expiryTime}. Result: {result?.ImageUrl ?? "null"}, Album: {result?.AlbumTitle ?? "null"}");
+            DebugLogger.Log($"[SPOTIFY {stopwatch.ElapsedMilliseconds}ms] Cached result for key '{cacheKey}'. Expiry: {expiryTime}");
 
+            var finalElapsedMs = stopwatch.ElapsedMilliseconds;
+            DebugLogger.Log($"[SPOTIFY {finalElapsedMs}ms] GetAlbumArtInfoAsync finished. Total time: {finalElapsedMs - initialElapsedMs}ms");
             return result;
         }
     }
