@@ -13,9 +13,13 @@ namespace CustomMediaRPC.Services;
 
 public class MediaStateManager
 {
-    private readonly SpotifyService _spotifyService;
-    private readonly DeezerService _deezerService;
-    private readonly AppSettings _settings;
+    // Singleton pattern
+    private static readonly Lazy<MediaStateManager> _lazyInstance = new Lazy<MediaStateManager>(() => new MediaStateManager());
+    public static MediaStateManager Instance => _lazyInstance.Value;
+
+    private SpotifyService? _spotifyService;
+    private DeezerService? _deezerService;
+    private AppSettings? _settings;
     private MediaState _currentState;
     private string? _selectedSourceAppId;
     private DateTime _lastPresenceUpdateTime = DateTime.MinValue;
@@ -27,13 +31,20 @@ public class MediaStateManager
     // Список выбранных сайтов для кнопок (получаем извне)
     public List<string> SelectedLinkSites { get; set; } = new List<string>();
 
-    public MediaStateManager(SpotifyService spotifyService, DeezerService deezerService, AppSettings settings)
+    private MediaStateManager() // Сделал конструктор приватным
+    {
+        _currentState = new MediaState();
+        // Инициализация здесь, если что-то нужно сделать до получения зависимостей
+        DebugLogger.Log("MediaStateManager Singleton instance created.");
+    }
+
+    // Метод для инициализации зависимостей
+    public void Initialize(SpotifyService spotifyService, DeezerService deezerService, AppSettings settings)
     {
         _spotifyService = spotifyService ?? throw new ArgumentNullException(nameof(spotifyService));
         _deezerService = deezerService ?? throw new ArgumentNullException(nameof(deezerService));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
-        _currentState = new MediaState();
-        DebugLogger.Log($"MediaStateManager initialized with SpotifyService: {spotifyService.GetHashCode()}, DeezerService: {deezerService.GetHashCode()}");
+        DebugLogger.Log($"MediaStateManager initialized with dependencies: Spotify={_spotifyService.GetHashCode()}, Deezer={_deezerService.GetHashCode()}");
     }
 
     public string? SelectedSourceAppId
@@ -60,6 +71,14 @@ public class MediaStateManager
 
     public async Task<RichPresence?> BuildRichPresenceAsync(GlobalSystemMediaTransportControlsSession session, Stopwatch? stopwatch = null)
     {
+        // --- Добавлена проверка зависимостей --- 
+        if (_spotifyService == null || _deezerService == null || _settings == null)
+        {
+            DebugLogger.Log("[BUILD ---ms] BuildRichPresenceAsync skipped: Services or settings not initialized.");
+            return null;
+        }
+        // ----------------------------------------
+
         stopwatch ??= Stopwatch.StartNew(); // Если stopwatch не передан, начинаем свой
         var initialElapsedMs = stopwatch.ElapsedMilliseconds;
         DebugLogger.Log($"[BUILD {initialElapsedMs}ms] BuildRichPresenceAsync started.");
@@ -307,8 +326,8 @@ public class MediaStateManager
                     _currentState.Artist ?? "Unknown Artist", 
                     _currentState.Status, 
                     _currentState.CoverArtThumbnail, 
-                    _currentState.CurrentPosition, 
-                    _currentState.TotalDuration
+                    _currentState.CurrentPosition,  // Передаем CurrentPosition
+                    _currentState.TotalDuration     // Передаем TotalDuration
                 );
             }
 
@@ -352,11 +371,11 @@ public class MediaStateManager
 
         if (AreRichPresenceEqual(newPresence, _lastSentPresence))
         {
-            DebugLogger.Log($"[SHOULD {stopwatch.ElapsedMilliseconds}ms] ShouldUpdatePresence: Presence hasn't changed. -> FALSE");
+            DebugLogger.Log($"[SHOULD {stopwatch?.ElapsedMilliseconds}ms] ShouldUpdatePresence: Presence hasn't changed. -> FALSE");
             return false;
         }
 
-         DebugLogger.Log($"[SHOULD {stopwatch.ElapsedMilliseconds}ms] ShouldUpdatePresence: Presence changed or needs update. -> TRUE");
+        DebugLogger.Log($"[SHOULD {stopwatch?.ElapsedMilliseconds}ms] ShouldUpdatePresence: Presence changed (Old: '{_lastSentPresence?.Details ?? "null"}' New: '{newPresence?.Details ?? "null"}') or needs update. -> TRUE");
         _lastPresenceUpdateTime = now; // Обновляем время последнего *успешного* обновления
         _lastSentPresence = newPresence; // Сохраняем то, что собираемся отправить
         return true;
@@ -556,5 +575,15 @@ public class MediaStateManager
         }
 
         return true; // Все кнопки идентичны
+    }
+
+    public MediaState? GetCurrentState()
+    {
+        return _currentState;
+    }
+
+    public void InitializeAsync()
+    {
+        // Метод оставлен пустым, но теперь он не async
     }
 } 

@@ -24,6 +24,7 @@ public class AppSettings : INotifyPropertyChanged
     // Новые общие настройки
     private bool _launchOnStartup;
     private bool _autoCheckForUpdates = true; // По умолчанию включено
+    private bool _silentAutoUpdates = false; // По умолчанию выключено - НОВОЕ ПОЛЕ
 
     // Список выбранных кнопок-ссылок
     private List<string> _selectedLinkButtonSites = new List<string>();
@@ -120,6 +121,13 @@ public class AppSettings : INotifyPropertyChanged
     {
         get => _autoCheckForUpdates;
         set => SetField(ref _autoCheckForUpdates, value);
+    }
+
+    // НОВОЕ СВОЙСТВО
+    public bool SilentAutoUpdates 
+    {
+        get => _silentAutoUpdates;
+        set => SetField(ref _silentAutoUpdates, value);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

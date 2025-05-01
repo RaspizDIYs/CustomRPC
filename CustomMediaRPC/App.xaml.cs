@@ -96,26 +96,46 @@ public partial class App : Application
             var latestVersion = updateInfo.TargetFullRelease.Version;
             Console.WriteLine($"Доступна новая версия: {latestVersion}");
 
-            MessageBoxResult result = MessageBox.Show(
-                $"Доступна новая версия ({latestVersion}). Хотите скачать и установить её сейчас?",
-                "Доступно обновление",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Information);
-
-            if (result == MessageBoxResult.Yes)
+            // Проверяем, включено ли тихое обновление
+            if (SettingsService.CurrentSettings.SilentAutoUpdates)
             {
+                Console.WriteLine("Тихое обновление включено. Начинаем скачивание в фоне...");
                 try
                 {
-                    Console.WriteLine("Скачивание обновлений...");
-                    await UpdateManager.DownloadUpdatesAsync(updateInfo, p => Console.WriteLine($"Загрузка: {p}%"));
-
-                    Console.WriteLine("Применение обновлений и перезапуск...");
-                    UpdateManager.ApplyUpdatesAndRestart(updateInfo);
+                    // Просто скачиваем, Velopack применит при следующем запуске
+                    await UpdateManager.DownloadUpdatesAsync(updateInfo, p => Console.WriteLine($"Авто-загрузка: {p}%"));
+                    Console.WriteLine("Обновление скачано. Будет применено при следующем запуске.");
                 }
                 catch (Exception downloadEx)
                 {
-                    Console.WriteLine($"Ошибка при скачивании/применении обновления: {downloadEx.Message}");
-                    MessageBox.Show($"Ошибка при скачивании/применении обновления: {downloadEx.Message}", "Ошибка обновления", MessageBoxButton.OK, MessageBoxImage.Error);
+                    Console.WriteLine($"Ошибка при фоновом скачивании обновления: {downloadEx.Message}");
+                    // Возможно, стоит показать ошибку пользователю?
+                    // MessageBox.Show($"Не удалось скачать обновление в фоне: {downloadEx.Message}", "Ошибка автообновления", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            else // Обычное обновление с запросом
+            {
+                MessageBoxResult result = MessageBox.Show(
+                    $"Доступна новая версия ({latestVersion}). Хотите скачать и установить её сейчас?",
+                    "Доступно обновление",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Information);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    try
+                    {
+                        Console.WriteLine("Скачивание обновлений...");
+                        await UpdateManager.DownloadUpdatesAsync(updateInfo, p => Console.WriteLine($"Загрузка: {p}%"));
+
+                        Console.WriteLine("Применение обновлений и перезапуск...");
+                        UpdateManager.ApplyUpdatesAndRestart(updateInfo);
+                    }
+                    catch (Exception downloadEx)
+                    {
+                        Console.WriteLine($"Ошибка при скачивании/применении обновления: {downloadEx.Message}");
+                        MessageBox.Show($"Ошибка при скачивании/применении обновления: {downloadEx.Message}", "Ошибка обновления", MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
                 }
             }
         }

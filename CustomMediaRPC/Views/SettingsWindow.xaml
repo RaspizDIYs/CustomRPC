@@ -6,7 +6,8 @@
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         mc:Ignorable="d"
         Title="Settings"
-        Height="300" Width="400"
+        Height="375" Width="320"
+        MinHeight="200" MinWidth="300"
         ResizeMode="NoResize" WindowStartupLocation="CenterOwner"
         ExtendsContentIntoTitleBar="True" WindowCornerPreference="Round" WindowBackdropType="Mica">
     <DockPanel>
@@ -17,34 +18,49 @@
                      CloseClicked="TitleBar_CloseClicked"/>
         <Grid Margin="10">
             <StackPanel>
-                <TextBlock Text="Floating Player Settings" FontWeight="SemiBold" Margin="5,0,5,5"/>
+                <TextBlock Text="Floating Player" FontWeight="SemiBold" Margin="5,0,5,5"/>
                 <CheckBox x:Name="EnableFloatingPlayerCheckBox"
-                          Content="Enable Floating Player"
+                          Content="Enable"
                           Margin="5,0,5,5"
                           Checked="EnableFloatingPlayerCheckBox_Changed"
                           Unchecked="EnableFloatingPlayerCheckBox_Changed"/>
                 <CheckBox x:Name="AlwaysOnTopCheckBox"
-                           Content="Player Always On Top"
+                           Content="Always On Top"
                            Margin="25,0,5,5" 
                            IsEnabled="{Binding IsChecked, ElementName=EnableFloatingPlayerCheckBox}"
                            Checked="AlwaysOnTopCheckBox_Changed"
                            Unchecked="AlwaysOnTopCheckBox_Changed"/>
 
-                <Separator Margin="5,10,5,10"/>
-
-                <TextBlock Text="General Settings" FontWeight="SemiBold" Margin="5,0,5,5"/>
+                <TextBlock Text="General" FontWeight="SemiBold" Margin="5,0,5,5"/>
                 <CheckBox x:Name="LaunchOnStartupCheckBox"
                           Content="Launch on Windows startup"
                           Margin="5,0,5,5"
                           Checked="LaunchOnStartupCheckBox_Changed"
                           Unchecked="LaunchOnStartupCheckBox_Changed"/>
                 
-                <CheckBox x:Name="AutoUpdateCheckBox"
-                          Content="Check for updates automatically on startup"
-                          Margin="5,0,5,5"
-                          Checked="AutoUpdateCheckBox_Changed"
-                          Unchecked="AutoUpdateCheckBox_Changed"/>
-
+                <TextBlock Text="Updates" FontWeight="SemiBold"  Margin="5,0,5,5"/>
+                <StackPanel Orientation="Vertical">
+                    <CheckBox x:Name="AutoUpdateCheckBox"
+                              Content="Check for updates on startup"     Margin="5,0,5,5"
+                              
+                              IsChecked="{Binding AutoCheckForUpdates, Mode=TwoWay}"
+                              Checked="AutoUpdateCheckBox_Changed"
+                              Unchecked="AutoUpdateCheckBox_Changed"/>
+                    
+                    <CheckBox x:Name="SilentAutoUpdateCheckBox"
+                              Content="Update automatically without asking"
+                              Margin="20,5,0,0"
+                              IsChecked="{Binding SilentAutoUpdates, Mode=TwoWay}"
+                              Checked="SilentAutoUpdateCheckBox_Changed"
+                              Unchecked="SilentAutoUpdateCheckBox_Changed"
+                              IsEnabled="{Binding IsChecked, ElementName=AutoUpdateCheckBox}"/>
+                    
+                    <Button x:Name="ManualCheckUpdateButton"
+                            Content="Check for Updates Now"
+                            Margin="0,10,0,0"
+                            HorizontalAlignment="Center"
+                            Click="ManualCheckUpdateButton_Click"/>
+                </StackPanel>
             </StackPanel>
         </Grid>
     </DockPanel>

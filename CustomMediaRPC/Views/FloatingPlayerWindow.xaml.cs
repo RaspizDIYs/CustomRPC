@@ -10,6 +10,7 @@ using System.Runtime.InteropServices.WindowsRuntime; // Для AsStreamForRead()
 using System.IO; // Добавляем для AsStreamForRead()
 using System.Windows.Media;
 using System.Threading.Tasks;
+using System.Windows.Threading; // Добавляем для DispatcherTimer
 
 namespace CustomMediaRPC.Views
 {
@@ -23,11 +24,27 @@ namespace CustomMediaRPC.Views
         // Можно добавить URI для обложки по умолчанию
         private static readonly Uri DefaultCoverUri = new Uri("pack://application:,,,/favicon.ico"); 
 
+        // Таймер для симуляции прогресса
+        private DispatcherTimer? _progressTimer;
+        private TimeSpan _lastKnownPosition = TimeSpan.Zero;
+        private TimeSpan _totalDuration = TimeSpan.Zero;
+        private DateTime _lastPositionUpdateTime = DateTime.MinValue;
+
         public FloatingPlayerWindow()
         {
             InitializeComponent();
             // Устанавливаем обложку по умолчанию при инициализации
             CoverArtImage.Source = new BitmapImage(DefaultCoverUri);
+            InitializeProgressTimer();
+        }
+
+        private void InitializeProgressTimer()
+        {
+            _progressTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
+            {
+                Interval = TimeSpan.FromMilliseconds(250) // Обновляем 4 раза в секунду
+            };
+            _progressTimer.Tick += ProgressTimer_Tick;
         }
 
         // Позволяет перетаскивать окно
@@ -81,22 +98,69 @@ namespace CustomMediaRPC.Views
             }
             CoverArtImage.Source = bitmap; // Устанавливаем загруженную (или дефолтную) картинку
 
-            // Обновление ProgressBar
+            // --- Логирование перед обновлением ProgressBar ---
+            Debug.WriteLine($"[FloatingPlayer] UpdateContent - Received Times: Current={currentPosition}, Total={totalDuration}, Status={status}");
+
+            // Обработка времени и управление таймером
             if (totalDuration.HasValue && totalDuration.Value > TimeSpan.Zero)
             {
-                TrackProgressBar.Maximum = totalDuration.Value.TotalSeconds;
-                TrackProgressBar.Value = currentPosition.HasValue ? currentPosition.Value.TotalSeconds : 0;
+                _totalDuration = totalDuration.Value;
+                _lastKnownPosition = currentPosition ?? TimeSpan.Zero;
+                _lastPositionUpdateTime = DateTime.UtcNow;
+
+                TrackProgressBar.Maximum = _totalDuration.TotalSeconds;
+                TrackProgressBar.Value = _lastKnownPosition.TotalSeconds;
                 TrackProgressBar.Visibility = Visibility.Visible;
+
+                if (status == MediaPlaybackStatus.Playing)
+                {
+                    _progressTimer?.Start();
+                    Debug.WriteLine("[FloatingPlayer] Progress timer started.");
+                }
+                else
+                {
+                    _progressTimer?.Stop();
+                    Debug.WriteLine("[FloatingPlayer] Progress timer stopped.");
+                    // При паузе/остановке значение уже установлено правильно
+                }
             }
             else
             {
-                // Скрыть ProgressBar, если длительность неизвестна
+                // Скрыть ProgressBar и остановить таймер, если длительность неизвестна
                 TrackProgressBar.Visibility = Visibility.Collapsed;
                 TrackProgressBar.Value = 0; 
                 TrackProgressBar.Maximum = 100; // Сброс на всякий случай
+                _progressTimer?.Stop();
+                _totalDuration = TimeSpan.Zero;
+                 Debug.WriteLine("[FloatingPlayer] Progress timer stopped (no duration).");
             }
         }
         
+        private void ProgressTimer_Tick(object? sender, EventArgs e)
+        {
+            if (_totalDuration > TimeSpan.Zero)
+            {
+                var elapsedSinceUpdate = DateTime.UtcNow - _lastPositionUpdateTime;
+                var estimatedPosition = _lastKnownPosition + elapsedSinceUpdate;
+
+                // Ограничиваем максимальное значение
+                if (estimatedPosition >= _totalDuration)
+                {
+                    estimatedPosition = _totalDuration;
+                    _progressTimer?.Stop(); // Останавливаем таймер в конце трека
+                    Debug.WriteLine("[FloatingPlayer] Progress timer stopped (end of track reached).");
+                }
+
+                TrackProgressBar.Value = estimatedPosition.TotalSeconds;
+                // Debug.WriteLine($"[FloatingPlayer Timer Tick] Estimated Pos: {estimatedPosition.TotalSeconds}/{_totalDuration.TotalSeconds}");
+            }
+            else
+            {
+                _progressTimer?.Stop(); // На всякий случай, если длительность вдруг стала некорректной
+                 Debug.WriteLine("[FloatingPlayer] Progress timer stopped (tick with no duration).");
+            }
+        }
+
         // Метод для установки свойства AlwaysOnTop
         public void SetAlwaysOnTop(bool alwaysOnTop)
         {

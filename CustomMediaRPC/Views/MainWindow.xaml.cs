@@ -53,7 +53,6 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private AppConfig? _config; // Сделали nullable
     private AppSettings _appSettings; // Добавлено
     private DiscordRpcClient? _client;
-    private MediaStateManager? _mediaStateManager;
     private HttpClient? _sharedHttpClient;
     private SpotifyService? _spotifyService;
     private DeezerService? _deezerService;
@@ -172,7 +171,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         _sharedHttpClient = new HttpClient();
         _spotifyService = new SpotifyService(_appSettings);
         _deezerService = new DeezerService(_appSettings);
-        _mediaStateManager = new MediaStateManager(_spotifyService, _deezerService, _appSettings);
+        MediaStateManager.Instance.Initialize(_spotifyService, _deezerService, _appSettings);
         // --------------------------------------------------------------------------
 
         Dispatcher.InvokeAsync(InitializeMediaIntegration);
@@ -240,20 +239,40 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
         _client.OnReady += (sender, e) =>
         {
-            Dispatcher.InvokeAsync(async () =>
+            Dispatcher.InvokeAsync(() => // Запускаем обновление UI в основном потоке
             {
                 DebugLogger.Log($"Received Ready from user {e.User.Username}");
-                _isRpcConnected = true;
-                _mediaStateManager?.SetLastSentPresence(null);
-                if (_mediaStateManager != null) 
+                _isRpcConnected = true; // Обновляем состояние
+                UpdateStatusText($"Connected as {e.User.Username}"); // Обновляем текст СРАЗУ
+                UpdateButtonStates(); // Обновляем кнопки СРАЗУ
+
+                // Показываем плавающий плеер СРАЗУ, если он включен
+                if (_appSettings.EnableFloatingPlayer)
                 {
-                    _mediaStateManager.SelectedLinkSites = new List<string>(_selectedLinkSites);
-                    DebugLogger.Log($"[OnReady] Copied selected sites to MediaStateManager: {string.Join(", ", _selectedLinkSites)}");
+                    DebugLogger.Log("[OnReady] Showing floating player because it's enabled in settings.");
+                    FloatingPlayerService.Instance.SetVisibility(true);
                 }
-                await UpdatePresenceFromSession();
-                UpdateStatusText($"Connected as {e.User.Username}");
-                UpdateButtonStates();
-                DebugLogger.Log("OnReady Dispatcher actions completed successfully.");
+
+                // Запускаем обновление Presence в фоновом потоке, не дожидаясь его
+                _ = Task.Run(async () => {
+                    try
+                    {
+                        MediaStateManager.Instance.SetLastSentPresence(null); // Сброс кэша presence
+                        if (MediaStateManager.Instance.SelectedLinkSites != null) 
+                        {
+                            MediaStateManager.Instance.SelectedLinkSites = new List<string>(_selectedLinkSites);
+                            DebugLogger.Log($"[OnReady Background] Copied selected sites to MediaStateManager: {string.Join(", ", _selectedLinkSites)}");
+                        }
+                        await UpdatePresenceFromSession(); // Запрашиваем первое обновление в фоне
+                        DebugLogger.Log("[OnReady Background] Initial presence update completed.");
+                    }
+                    catch (Exception bgEx)
+                    {
+                         DebugLogger.Log("[OnReady Background] Error during initial presence update.", bgEx);
+                    }
+                });
+
+                DebugLogger.Log("OnReady Dispatcher actions completed (UI updated, presence update started).");
             });
         };
 
@@ -276,7 +295,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     {
         try
         {
-            _sessionManager ??= await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+            _sessionManager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
             if (_sessionManager == null)
             {
                 UpdateStatusText("Failed to get SMTC Session Manager.");
@@ -287,10 +306,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
             if (_config != null && !string.IsNullOrEmpty(_config.LastSelectedSourceAppId))
             {
-                if (_mediaStateManager != null)
-                {
-                    _mediaStateManager.SelectedSourceAppId = _config.LastSelectedSourceAppId;
-                }
+                MediaStateManager.Instance.SelectedSourceAppId = _config.LastSelectedSourceAppId;
                 DebugLogger.Log($"InitializeMediaIntegration: Loaded saved source ID \'{_config.LastSelectedSourceAppId}\' into MediaStateManager.");
             }
             else
@@ -347,7 +363,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         DebugLogger.Log("--- UpdateSessionList started ---");
 
         // Используем ?. 
-        string? desiredAppId = _mediaStateManager?.SelectedSourceAppId;
+        string? desiredAppId = MediaStateManager.Instance.SelectedSourceAppId;
         DebugLogger.Log($"UpdateSessionList: Desired AppId (from StateManager): {desiredAppId ?? "null"}");
 
         try
@@ -498,10 +514,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                 SessionComboBox.IsEnabled = false;
                 SessionComboBox.SelectedIndex = -1;
                  if (_currentSession != null) {
-                     if (_mediaStateManager != null)
-                     {
-                        _mediaStateManager.SelectedSourceAppId = null;
-                     }
+                     MediaStateManager.Instance.SelectedSourceAppId = null;
                      _currentSession.MediaPropertiesChanged -= MediaPropertiesChangedHandler;
                      _currentSession.PlaybackInfoChanged -= PlaybackInfoChangedHandler;
                      _currentSession = null;
@@ -646,9 +659,9 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                 var stopwatch = Stopwatch.StartNew();
                 DebugLogger.Log($"[TIMER {stopwatch.ElapsedMilliseconds}ms] Debounce timer elapsed. Calling UpdatePresenceFromSession...");
                 // Передаем актуальный список сайтов перед обновлением
-                if (_mediaStateManager != null) 
+                if (MediaStateManager.Instance.SelectedLinkSites != null) 
                 {
-                    _mediaStateManager.SelectedLinkSites = new List<string>(_selectedLinkSites);
+                    MediaStateManager.Instance.SelectedLinkSites = new List<string>(_selectedLinkSites);
                     DebugLogger.Log($"[TIMER {stopwatch.ElapsedMilliseconds}ms] Updated MediaStateManager.SelectedLinkSites: {string.Join(", ", _selectedLinkSites)}");
                 }
                 await UpdatePresenceFromSession(stopwatch);
@@ -685,58 +698,37 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
     private async Task UpdatePresenceFromSession(Stopwatch? stopwatch = null)
     {
-        if (!_isRpcConnected || _client == null || !_client.IsInitialized || _mediaStateManager == null || _spotifyService == null)
+        stopwatch ??= Stopwatch.StartNew();
+        var initialElapsedMs = stopwatch.ElapsedMilliseconds;
+        DebugLogger.Log($"[UPDATE {initialElapsedMs}ms] UpdatePresenceFromSession started.");
+
+        if (_currentSession == null || _client == null)
         {
-            DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] UpdatePresenceFromSession skipped: Preconditions not met (RPC Connected: {_isRpcConnected}, Client Valid: {_client != null && _client.IsInitialized}, StateManager Valid: {_mediaStateManager != null}, SpotifyService Valid: {_spotifyService != null})");
+            DebugLogger.Log($"[UPDATE {stopwatch.ElapsedMilliseconds}ms] UpdatePresenceFromSession: No current session or client. Clearing presence.");
+            _client?.ClearPresence();
+            // Сбрасываем кэш в менеджере состояний, если отключаемся
+            MediaStateManager.Instance.SetLastSentPresence(null);
             return;
         }
-
-        if (_currentSession == null)
-        {
-            DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] UpdatePresenceFromSession: Clearing presence because current session is null");
-            _client.ClearPresence();
-            UpdateStatusText("No media source selected or active.");
-            return;
-        }
-
-        DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] UpdatePresenceFromSession started for session: {_currentSession.SourceAppUserModelId}");
 
         try
         {
-            DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] Calling BuildRichPresenceAsync...");
-            RichPresence? newPresence = await _mediaStateManager.BuildRichPresenceAsync(_currentSession, stopwatch);
-            DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] BuildRichPresenceAsync finished.");
+            // Используем синглтон для получения Presence
+            RichPresence? newPresence = await MediaStateManager.Instance.BuildRichPresenceAsync(_currentSession, stopwatch);
+            var buildElapsedMs = stopwatch.ElapsedMilliseconds;
+             DebugLogger.Log($"[UPDATE {buildElapsedMs}ms] Got presence from MediaStateManager. Details: {newPresence?.Details ?? "null"}");
 
-            if (newPresence == null)
+            // Используем синглтон для проверки
+            if (MediaStateManager.Instance.ShouldUpdatePresence(newPresence, stopwatch))
             {
-                DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] UpdatePresenceFromSession: BuildRichPresenceAsync returned null");
-                if (_mediaStateManager.CurrentState.IsUnknown)
-                {
-                    DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] UpdatePresenceFromSession: Current state is Unknown, clearing presence.");
-                    _client.ClearPresence();
-                    UpdateStatusText("Waiting for media info...");
-                }
-                return;
-            }
-
-            DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] Calling ShouldUpdatePresence...");
-            if (_mediaStateManager.ShouldUpdatePresence(newPresence, stopwatch))
-            {
-                DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] Presence data changed. Calling _client.SetPresence...");
-                string title = _mediaStateManager.CurrentState.Title ?? "Unknown Title";
-                string artist = _mediaStateManager.CurrentState.Artist ?? "Unknown Artist";
-                // string? coverUrl = _mediaStateManager.CurrentState.CoverArtUrl; // URL больше не нужен для плеера
-                MediaPlaybackStatus status = _mediaStateManager.CurrentState.Status; // Получаем статус
-                IRandomAccessStreamReference? thumbnail = _mediaStateManager.CurrentState.CoverArtThumbnail; // Получаем миниатюру
-
-                DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] Calling _client.SetPresence...");
+                 DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] Calling _client.SetPresence...");
                 _client.SetPresence(newPresence);
-                UpdateStatusText($"{title} - {artist}");
+                // Обновляем текст статуса на основе данных из newPresence, которые уже были подготовлены
+                UpdateStatusText($"{newPresence?.Details ?? "Unknown"} - {newPresence?.State ?? "Stopped"}");
                 
-                // Обновляем плавающий плеер
-                // DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] Updating Floating Player: Title='{title}', Artist='{artist}', Status='{status}', CoverUrl='{coverUrl ?? "NULL"}'");
-                DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] Updating Floating Player: Title='{title}', Artist='{artist}', Status='{status}', Thumbnail: {thumbnail != null}"); // Лог с миниатюрой
-                FloatingPlayerService.Instance.UpdateContent(title, artist, status, thumbnail); // Передаем миниатюру
+                // Обновляем плавающий плеер - ЭТОТ ВЫЗОВ ЛИШНИЙ, т.к. BuildRichPresenceAsync уже обновил плеер
+                // DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] Updating Floating Player: Title='{title}', Artist='{artist}', Status='{status}', Thumbnail: {thumbnail != null}"); // Лог с миниатюрой
+                // FloatingPlayerService.Instance.UpdateContent(title, artist, status, thumbnail); // Передаем миниатюру
                 
                 DebugLogger.Log($"[UPDATE {stopwatch?.ElapsedMilliseconds}ms] SetPresence called successfully. Waiting for OnPresenceUpdate callback...");
             }
@@ -784,13 +776,10 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
         if (previousSessionId == newSessionId) {
             DebugLogger.Log($"SwitchToSession called. Current: {previousSessionId}, New: {newSessionId}. Session is the same.");
-            if (_mediaStateManager?.SelectedSourceAppId != newSessionId)
+            if (MediaStateManager.Instance.SelectedSourceAppId != newSessionId)
             {
-                 DebugLogger.Log($"SwitchToSession [SYNC]: Session is same, but StateManager had different ID ('{_mediaStateManager?.SelectedSourceAppId}'). Syncing to '{newSessionId}'");
-                 if (_mediaStateManager != null)
-                 {
-                    _mediaStateManager.SelectedSourceAppId = newSessionId;
-                 }
+                 DebugLogger.Log($"SwitchToSession [SYNC]: Session is same, but StateManager had different ID ('{MediaStateManager.Instance.SelectedSourceAppId}'). Syncing to '{newSessionId}'");
+                 MediaStateManager.Instance.SelectedSourceAppId = newSessionId;
                  RequestPresenceUpdateDebounced(); 
             }
             return;
@@ -806,9 +795,9 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         }
 
         _currentSession = newSession;
-        if (_mediaStateManager != null)
+        if (MediaStateManager.Instance.SelectedSourceAppId != newSessionId)
         {
-            _mediaStateManager.SelectedSourceAppId = newSessionId;
+            MediaStateManager.Instance.SelectedSourceAppId = newSessionId;
         }
 
         if (_currentSession != null)
@@ -822,9 +811,9 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             {
                 DebugLogger.Log("SwitchToSession: Requesting presence update for the new session...");
                 // Передаем актуальный список сайтов перед обновлением
-                if (_mediaStateManager != null) 
+                if (MediaStateManager.Instance.SelectedLinkSites != null) 
                 {
-                    _mediaStateManager.SelectedLinkSites = new List<string>(_selectedLinkSites);
+                    MediaStateManager.Instance.SelectedLinkSites = new List<string>(_selectedLinkSites);
                      DebugLogger.Log($"[SwitchToSession] Updated MediaStateManager.SelectedLinkSites: {string.Join(", ", _selectedLinkSites)}");
                 }
                 Dispatcher.InvokeAsync(() => UpdatePresenceFromSession());
@@ -839,7 +828,8 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                 _client.ClearPresence();
                  DebugLogger.Log("SwitchToSession: Cleared Discord presence.");
             }
-            UpdateStatusText("No media source selected or active.");
+            MediaStateManager.Instance.SelectedSourceAppId = null;
+            ClearCurrentSession();
         }
     }
 
@@ -887,43 +877,26 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
     private void DisconnectDiscord()
     {
-        _mediaStateManager?.CancelPreviousPresenceBuild(); // Отменяем любые активные запросы обложек
-
-        if (_client != null) // Check if client exists before accessing IsInitialized
+        DebugLogger.Log("DisconnectDiscord called.");
+        if (_client != null)
         {
-            DebugLogger.Log("--- DisconnectDiscord called ---");
-            try 
-            { 
-                if (_client.IsInitialized) // Only Clear/Dispose if initialized
-                {
-                     DebugLogger.Log("Clearing presence and disposing client...");
-                    _client.ClearPresence();
-                    _client.Dispose();
-                }
-            }
-            catch (Exception ex)
-            {
-                 DebugLogger.Log($"Error during Discord client dispose: {ex.Message}");
-            }
-            finally
-            {
-                _client = null; // Set to null regardless of errors
-                _isRpcConnected = false; // Ensure state is updated
-                Dispatcher.InvokeAsync(() => // Ensure UI updates are on the UI thread
-                {
-                     UpdateStatusText("Disconnected from Discord.");
-                     UpdateButtonStates();
-                });
-                 DebugLogger.Log("--- DisconnectDiscord finished (client set to null, state updated) ---");
-            }
+            DebugLogger.Log("Disposing Discord client...");
+            _client.ClearPresence();
+            _client.Dispose();
+            _client = null;
+            _isRpcConnected = false;
+            // Сбрасываем кэш в менеджере состояний
+            MediaStateManager.Instance.SetLastSentPresence(null);
+            UpdateStatusText("Disconnected");
+            DebugLogger.Log("Discord client disposed.");
         }
         else
         {
-             DebugLogger.Log("--- DisconnectDiscord called but client was already null ---");
-             // Ensure state is correct even if client was already null
-             _isRpcConnected = false;
-             Dispatcher.InvokeAsync(UpdateButtonStates);
+            DebugLogger.Log("DisconnectDiscord: Client was already null.");
         }
+        UpdateButtonStates();
+        // Просто скрываем окно плеера (НОВЫЙ СПОСОБ)
+        FloatingPlayerService.Instance.HidePlayer(); 
     }
 
     private void UpdateButtonStates()
@@ -955,7 +928,11 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             {
                 LinkButtonsExpander.IsExpanded = false;
             }
-             DebugLogger.Log($"UpdateButtonStates: sourceSelected={sourceSelected}, _isRpcConnected={_isRpcConnected}, canConnect={canConnect}, canDisconnect={canDisconnect}, SessionComboBox.IsEnabled={SessionComboBox.IsEnabled}, SettingsEnabled={settingsEnabled}");
+
+            // Блокируем кнопку Настроек
+            SettingsButton.IsEnabled = settingsEnabled;
+
+            DebugLogger.Log($"UpdateButtonStates: sourceSelected={sourceSelected}, _isRpcConnected={_isRpcConnected}, canConnect={canConnect}, canDisconnect={canDisconnect}, SessionComboBox.IsEnabled={SessionComboBox.IsEnabled}, SettingsEnabled={settingsEnabled}");
         });
     }
 
@@ -1141,9 +1118,9 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         {
              DebugLogger.Log("[LinkCheckBox_Changed] RPC is connected, requesting presence update.");
              // Передаем актуальный список сайтов перед обновлением
-             if (_mediaStateManager != null) 
+             if (MediaStateManager.Instance.SelectedLinkSites != null) 
              {
-                _mediaStateManager.SelectedLinkSites = new List<string>(_selectedLinkSites);
+                MediaStateManager.Instance.SelectedLinkSites = new List<string>(_selectedLinkSites);
                  DebugLogger.Log($"[LinkCheckBox_Changed] Updated MediaStateManager.SelectedLinkSites: {string.Join(", ", _selectedLinkSites)}");
              }
              // Используем прямой вызов, а не отложенный, для мгновенного эффекта

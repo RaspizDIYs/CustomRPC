@@ -89,13 +89,22 @@ namespace CustomMediaRPC.Services
                 {
                     EnsurePlayerWindowExists();
                     _playerWindow?.Show();
-                    Debug.WriteLine("FloatingPlayerWindow shown.");
+                    _playerWindow?.Activate(); // Активируем окно
+                    Debug.WriteLine("FloatingPlayerWindow shown and activated (initial content will come from regular update).");
+
+                    // --- УБРАНА ЛОГИКА ПОЛУЧЕНИЯ И ПРИМЕНЕНИЯ НАЧАЛЬНОГО СОСТОЯНИЯ ---
+                    // var initialState = MediaStateManager.Instance.GetCurrentState();
+                    // if (_playerWindow != null && initialState != null) { ... }
+                    // else if (_playerWindow != null) { ... }
+                    // ---------------------------------------------------------------
                 }
                 else
                 {
                     // Просто скрываем, не закрываем, чтобы сохранить состояние
-                    _playerWindow?.Hide();
-                    Debug.WriteLine("FloatingPlayerWindow hidden.");
+                    // Используем HidePlayer(), чтобы не менять _appSettings.EnableFloatingPlayer
+                    // _playerWindow?.Hide(); // Неправильно, нужно использовать HidePlayer()
+                    HidePlayer(); // Правильный вызов для скрытия без изменения настройки
+                    Debug.WriteLine("FloatingPlayerWindow hidden via SetVisibility(false) -> HidePlayer().");
                 }
             });
         }
@@ -140,6 +149,16 @@ namespace CustomMediaRPC.Services
             });
         }
         
+        // Новый метод для скрытия плеера без изменения настроек
+        public void HidePlayer()
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                _playerWindow?.Hide();
+                Debug.WriteLine("FloatingPlayerWindow hidden via HidePlayer().");
+            });
+        }
+
         public void Shutdown()
         {
              Application.Current.Dispatcher.Invoke(() =>

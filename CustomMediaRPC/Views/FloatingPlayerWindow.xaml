@@ -6,7 +6,7 @@
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         mc:Ignorable="d"
         Title="Floating Player"
-        Width="250"
+        Width="230"
         Height="80"
         AllowsTransparency="True"
         WindowStyle="None"
@@ -15,74 +15,76 @@
         Topmost="True"
         ResizeMode="NoResize"
         MouseDown="Window_MouseDown">
-    <Border Background="#DD222222" CornerRadius="5" BorderThickness="1" BorderBrush="#55FFFFFF" Padding="5">
-        <Grid Margin="5">
+    <Border Background="#DD222222" CornerRadius="5" BorderThickness="1" BorderBrush="#55FFFFFF" Padding="2">
+        <Grid Margin="3">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
-            <!-- Обложка (в круге) -->
-            <Border Grid.Column="0"
-                    Width="50"
-                    Height="50"
-                    CornerRadius="25"
-                    Margin="0,0,10,0"
-                    Background="#555555">
-                <Border.Clip>
-                    <EllipseGeometry Center="25,25" RadiusX="25" RadiusY="25"/>
-                </Border.Clip>
-                <Image x:Name="CoverArtImage"
-                       Stretch="UniformToFill"/>
+            <!-- Обложка -->
+            <Border Grid.Row="0" Grid.Column="0" Width="50" Height="50" CornerRadius="4" Margin="0,0,8,0" Background="#333333">
+                <Image x:Name="CoverArtImage" Stretch="UniformToFill">
+                    <Image.Clip>
+                        <RectangleGeometry RadiusX="4" RadiusY="4" Rect="0,0,50,50"/>
+                    </Image.Clip>
+                </Image>
             </Border>
 
             <!-- Название, Артист и Кнопки -->
-            <StackPanel Grid.Column="1" VerticalAlignment="Top">
+            <StackPanel Grid.Row="0" Grid.Column="1" VerticalAlignment="Center">
                 <TextBlock x:Name="TitleTextBlock"
                            Text="Unknown Title"
                            Foreground="White"
                            FontWeight="SemiBold"
+                           FontSize="12"
                            TextTrimming="CharacterEllipsis"
-                           Margin="0,0,0,2"/>
+                           Margin="0,0,0,1"/>
                 <TextBlock x:Name="ArtistTextBlock"
                            Text="Unknown Artist"
-                           Foreground="#CCCCCC"
+                           Foreground="#BBBBBB"
                            FontSize="11"
                            TextTrimming="CharacterEllipsis"
-                           Margin="0,0,0,5"/>
-
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                           Margin="0,0,0,3"/>
+                <!-- Кнопки управления -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
                     <Button x:Name="PreviousButton"
                             Click="PreviousButton_Click"
-                            Width="25" Height="25" Margin="0,0,5,0"
+                            Width="22" Height="22" Margin="0,0,5,0"
                             Padding="0" BorderThickness="0" Background="Transparent">
-                        <ui:SymbolIcon Symbol="Previous24" Foreground="White"/>
+                        <ui:SymbolIcon Symbol="Previous20" Foreground="White"/>
                     </Button>
-                    <Grid Width="25" Margin="15,0,15,0">
+                    <Grid Width="22" Margin="5,0,5,0">
                         <Button x:Name="PlayPauseButton"
                                 Click="PlayPauseButton_Click"
-                                Width="25" Height="25"
+                                Width="22" Height="22"
                                 Padding="0" BorderThickness="0" Background="Transparent">
-                            <ui:SymbolIcon x:Name="PlayPauseIcon" Symbol="Play24" Foreground="White"/>
+                            <ui:SymbolIcon x:Name="PlayPauseIcon" Symbol="Play20" Foreground="White"/>
                         </Button>
                     </Grid>
                     <Button x:Name="NextButton"
                             Click="NextButton_Click"
-                            Width="25" Height="25" Margin="5,0,0,0"
+                            Width="22" Height="22" Margin="5,0,0,0"
                             Padding="0" BorderThickness="0" Background="Transparent">
-                        <ui:SymbolIcon Symbol="Next24" Foreground="White"/>
+                        <ui:SymbolIcon Symbol="Next20" Foreground="White"/>
                     </Button>
                 </StackPanel>
-
-                <ProgressBar x:Name="TrackProgressBar"
-                             Height="5"
-                             Margin="0,8,0,0"
-                             Background="#444444"
-                             Foreground="#FF7F00"
-                             BorderThickness="0"
-                             Minimum="0"
-                             Maximum="100" />
             </StackPanel>
+
+            <!-- Прогресс Бар -->
+            <ProgressBar x:Name="TrackProgressBar"
+                         Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                         Height="4"
+                         Margin="0,6,0,0"
+                         Background="#66333333"
+                         Foreground="#AAFFFFFF"
+                         BorderThickness="0"
+                         Minimum="0"
+                         Maximum="100" />
         </Grid>
     </Border>
 </Window> 
