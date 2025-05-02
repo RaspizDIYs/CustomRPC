@@ -81,6 +81,8 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private const string EncodedLastFmApiKey = "NTU4MDdkZjA4MjhmMTdkNGY0YWYwZWJmYzU3Y2I4MTk="; // Base64 of "55807df0828f17d4f4af0ebfc57cb819"
     // -------------------------------------
 
+    private bool _isCopyingDebugInfo = false; // Флаг, чтобы предотвратить повторный вход
+
     public AppSettings CurrentAppSettings => _appSettings; // Добавляем публичное свойство
 
     public MainWindow(AppSettings settings) // Изменен конструктор
@@ -1219,40 +1221,61 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     // -----------------------------------------------
 
     // Новый обработчик для кнопки копирования
-    private void CopyDebugInfoButton_Click(object sender, RoutedEventArgs e)
+    private async void CopyDebugInfoButton_Click(object sender, RoutedEventArgs e)
     {
+        // Предотвращаем повторный запуск, если копирование уже идет
+        if (_isCopyingDebugInfo)
+        {
+            return;
+        }
+
+        _isCopyingDebugInfo = true;
+        // Указываем полный тип System.Windows.Controls.Button
+        var button = (System.Windows.Controls.Button)sender; 
+        var originalContent = button.Content;
+        var originalToolTip = button.ToolTip;
+        button.IsEnabled = false; // Отключаем кнопку
+
         try
         {
             string clientId = Encoding.UTF8.GetString(Convert.FromBase64String(EncodedClientId));
             Clipboard.SetText(clientId);
-            
-            // Эффект успеха
-            var originalContent = CopyDebugInfoButton.Content;
-            var originalToolTip = CopyDebugInfoButton.ToolTip;
-            CopyDebugInfoButton.Content = "✓";
-            CopyDebugInfoButton.ToolTip = "Скопировано!";
-            
-            Task.Delay(1500).ContinueWith(_ => Dispatcher.Invoke(() => 
-            {
-                CopyDebugInfoButton.Content = originalContent; // Восстанавливаем исходный текст
-                CopyDebugInfoButton.ToolTip = originalToolTip; // Восстанавливаем исходную подсказку
-            }));
+
+            // Успех
+            button.Content = "✓";
+            button.ToolTip = "Скопировано!";
         }
         catch (Exception ex)
         {
             DebugLogger.Log("Error copying debug info to clipboard", ex);
-            
-            // Эффект ошибки
-            var originalContent = CopyDebugInfoButton.Content;
-            var originalToolTip = CopyDebugInfoButton.ToolTip;
-            CopyDebugInfoButton.Content = "X";
-            CopyDebugInfoButton.ToolTip = "Ошибка копирования";
-             
-            Task.Delay(1500).ContinueWith(_ => Dispatcher.Invoke(() => 
+            // Ошибка
+            button.Content = "X";
+            button.ToolTip = "Ошибка копирования";
+        }
+        finally // Этот блок выполнится всегда: и после try, и после catch
+        {
+            // Ждем 1.5 секунды перед восстановлением
+            await Task.Delay(500);
+
+            // Восстанавливаем исходное состояние и включаем кнопку
+            // Проверяем Dispatcher, так как Task.Delay может завершиться в другом потоке
+            if (button.Dispatcher.CheckAccess())
             {
-                CopyDebugInfoButton.Content = originalContent; // Восстанавливаем исходный текст
-                CopyDebugInfoButton.ToolTip = originalToolTip; // Восстанавливаем исходную подсказку
-            }));
+                button.Content = originalContent;
+                button.ToolTip = originalToolTip;
+                button.IsEnabled = true;
+                _isCopyingDebugInfo = false; // Сбрасываем флаг
+            }
+            else
+            {
+                button.Dispatcher.Invoke(() =>
+                {
+                    button.Content = originalContent;
+                    button.ToolTip = originalToolTip;
+                    button.IsEnabled = true;
+                    _isCopyingDebugInfo = false; // Сбрасываем флаг
+                });
+            }
         }
     }
 }

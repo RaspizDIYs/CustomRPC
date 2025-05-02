@@ -567,8 +567,19 @@ public class MediaStateManager
 
         for (int i = 0; i < b1.Length; i++)
         {
-            // Сравниваем Label и Url каждой кнопки
-            if (b1[i].Label != b2[i].Label || b1[i].Url != b2[i].Url)
+            // Добавляем null-conditional операторы (?.) при доступе к свойствам
+            // и проверяем, что оба элемента не null перед сравнением
+            var button1 = b1[i];
+            var button2 = b2[i];
+
+            if (button1 == null || button2 == null) // Если один из элементов null (маловероятно, но возможно)
+            {
+                 if (button1 == button2) continue; // Оба null, продолжаем
+                 return false; // Один null, другой нет - не равны
+            }
+            
+            // Сравниваем Label и Url каждой кнопки, теперь button1 и button2 точно не null
+            if (button1.Label != button2.Label || button1.Url != button2.Url)
             {
                 return false;
             }

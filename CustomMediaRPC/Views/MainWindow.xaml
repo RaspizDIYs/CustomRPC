@@ -87,7 +87,7 @@
                 </StackPanel>
 
                 <!-- Настройки обложек: Убираем GroupBox, оставляем StackPanel -->
-                <StackPanel Margin="0,10,0,0">
+                <StackPanel Margin="0,10,0,0" VerticalAlignment="Top">
                     <!-- Новый общий чекбокс -->
                     <CheckBox x:Name="EnableCoverArtCheckBox"
                               Content="Load album art"
@@ -97,6 +97,7 @@
                     <!-- Новый ComboBox для выбора источника -->
                     <ComboBox x:Name="CoverArtSourceComboBox"
                               Width="330"
+                              MaxWidth="330"
                               Margin="20,5,0,5" 
                               IsEnabled="{Binding IsChecked, ElementName=EnableCoverArtCheckBox}" 
                               SelectedValue="{Binding CurrentAppSettings.CoverArtSource, Mode=TwoWay}">
@@ -118,21 +119,17 @@
                              Text="{Binding CurrentAppSettings.CustomDefaultCoverUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              Visibility="{Binding IsChecked, ElementName=UseCustomCoverCheckBox, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 </StackPanel>
-
-                <!-- Оборачиваем выбор сайтов в Expander -->
-                <Expander x:Name="LinkButtonsExpander" Header="Select link buttons (max 2)" Margin="0,10,0,0">
-                    <!-- Добавляем ScrollViewer -->
+                
+                <Expander x:Name="LinkButtonsExpander" Header="Select link buttons" Margin="0,10,0,0" Width="360">
                     <ScrollViewer MaxHeight="75" VerticalScrollBarVisibility="Auto">
-                        <!-- Используем UniformGrid вместо StackPanel -->
-                        <UniformGrid Columns="2" Margin="5,0,0,0"> <!-- Убрал старый отступ StackPanel, добавил небольшой для UniformGrid -->
-                            <!-- Убираем большие вертикальные отступы у чекбоксов, UniformGrid сам расставит -->
-                            <CheckBox x:Name="SpotifyLinkCheckBox" Content="Spotify" Margin="5" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
-                            <CheckBox x:Name="YouTubeMusicLinkCheckBox" Content="YouTube Music" Margin="5" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
-                            <CheckBox x:Name="AppleMusicLinkCheckBox" Content="Apple Music" Margin="5" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
-                            <CheckBox x:Name="YandexMusicLinkCheckBox" Content="Yandex Music" Margin="5" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
-                            <CheckBox x:Name="DeezerLinkCheckBox" Content="Deezer" Margin="5" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
-                            <CheckBox x:Name="VkMusicLinkCheckBox" Content="VK Music" Margin="5" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
-                            <CheckBox x:Name="GitHubLinkCheckBox" Content="Project Download" Margin="5" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                        <UniformGrid Columns="2" Margin="0,0,0,0"> 
+                            <CheckBox x:Name="SpotifyLinkCheckBox" Content="Spotify" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                            <CheckBox x:Name="YouTubeMusicLinkCheckBox" Content="YouTube Music" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                            <CheckBox x:Name="AppleMusicLinkCheckBox" Content="Apple Music" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                            <CheckBox x:Name="YandexMusicLinkCheckBox" Content="Yandex Music" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                            <CheckBox x:Name="DeezerLinkCheckBox" Content="Deezer" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                            <CheckBox x:Name="VkMusicLinkCheckBox" Content="VK Music" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                            <CheckBox x:Name="GitHubLinkCheckBox" Content="Project Download" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
                         </UniformGrid>
                     </ScrollViewer>
                 </Expander>
