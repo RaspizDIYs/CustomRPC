@@ -533,10 +533,17 @@ public class MediaStateManager
     // Заглушка - Заменить реальной логикой поиска URL!
     private string? GetTrackUrlForService(string serviceName, string? artist, string? title)
     {
-        if (string.IsNullOrEmpty(artist) || string.IsNullOrEmpty(title)) return null;
+        // Return null if artist or title is missing
+        if (string.IsNullOrWhiteSpace(artist) || string.IsNullOrWhiteSpace(title))
+        {
+            DebugLogger.Log($"[GetTrackUrlForService] Cannot get URL for {serviceName}: Artist or Title is missing.");
+            return null;
+        } 
         
-        // Очень упрощенный пример - нужно использовать API или поиск!
-        string query = Uri.EscapeDataString($"{artist} {title}");
+        // Very simplified example - need to use API or search!
+        // Now artist and title are guaranteed not to be null or whitespace here
+        // Using null-forgiving operator (!) to satisfy compiler warning, though checks should suffice
+        string query = Uri.EscapeDataString($"{artist!} {title!}"); 
         switch (serviceName.ToLowerInvariant())
         {
             case "spotify":

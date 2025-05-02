@@ -11,6 +11,8 @@ using System.IO; // Добавляем для AsStreamForRead()
 using System.Windows.Media;
 using System.Threading.Tasks;
 using System.Windows.Threading; // Добавляем для DispatcherTimer
+using Windows.Media.Control; // Add this for PlaybackStatus
+using CustomMediaRPC.Services; // Add this for LocalizationManager
 
 namespace CustomMediaRPC.Views
 {
@@ -20,6 +22,7 @@ namespace CustomMediaRPC.Views
         public event EventHandler? PreviousRequested;
         public event EventHandler? PlayPauseToggleRequested;
         public event EventHandler? NextRequested;
+        public event EventHandler? HideRequested;
 
         // Можно добавить URI для обложки по умолчанию
         private static readonly Uri DefaultCoverUri = new Uri("pack://application:,,,/favicon.ico"); 
@@ -36,6 +39,8 @@ namespace CustomMediaRPC.Views
             // Устанавливаем обложку по умолчанию при инициализации
             CoverArtImage.Source = new BitmapImage(DefaultCoverUri);
             InitializeProgressTimer();
+            // Initialize with default content (null stream reference)
+            UpdateContent("No track playing", "", GlobalSystemMediaTransportControlsSessionPlaybackStatus.Stopped, null, 0, 100); 
         }
 
         private void InitializeProgressTimer()
@@ -51,68 +56,96 @@ namespace CustomMediaRPC.Views
         private void Window_MouseDown(object sender, MouseButtonEventArgs e)
         {
             if (e.ChangedButton == MouseButton.Left)
-                this.DragMove();
+            {
+                try 
+                {
+                    DragMove();
+                }
+                 catch (InvalidOperationException) 
+                 { 
+                     // Can happen if the window is clicked very quickly after opening/closing
+                 }
+            }
         }
 
-        // Обновленный метод для обновления содержимого плеера
-        public async void UpdateContent(string title, string artist, MediaPlaybackStatus status, IRandomAccessStreamReference? thumbnail = null, TimeSpan? currentPosition = null, TimeSpan? totalDuration = null)
+        // Update method signature to accept IRandomAccessStreamReference?
+        public void UpdateContent(string? title, string? artist, GlobalSystemMediaTransportControlsSessionPlaybackStatus status, IRandomAccessStreamReference? thumbnailRef, double currentPosition, double maxPosition)
         {
-            TitleTextBlock.Text = title ?? "Unknown Title";
-            ArtistTextBlock.Text = artist ?? "Unknown Artist";
+             Debug.WriteLine($"[FloatingPlayer] UpdateContent called: Title='{title}', Artist='{artist}', Status='{status}', ThumbnailRef is null: {thumbnailRef == null}, Position={currentPosition}/{maxPosition}");
+             if (!Dispatcher.CheckAccess())
+            {
+                // Invoke the internal method with the new signature
+                Dispatcher.Invoke(() => UpdateContentInternal(title, artist, status, thumbnailRef, currentPosition, maxPosition));
+            }
+            else
+            {
+                // Call the internal method directly with the new signature
+                UpdateContentInternal(title, artist, status, thumbnailRef, currentPosition, maxPosition);
+            }
+        }
+        
+        // Update internal method signature and implement async image loading
+        private async void UpdateContentInternal(string? title, string? artist, GlobalSystemMediaTransportControlsSessionPlaybackStatus status, IRandomAccessStreamReference? thumbnailRef, double currentPosition, double maxPosition)
+        {
+            TitleTextBlock.Text = string.IsNullOrEmpty(title) ? LocalizationManager.GetString("UnknownTitle") : title;
+            ArtistTextBlock.Text = string.IsNullOrEmpty(artist) ? LocalizationManager.GetString("UnknownArtist") : artist;
 
-            // Обновляем иконку Play/Pause
-            PlayPauseIcon.Symbol = status == MediaPlaybackStatus.Playing ? SymbolRegular.Pause24 : SymbolRegular.Play24;
+            // Update Play/Pause button icon and tooltip
+            bool isPlaying = status == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
+            // PlayPauseButton.Content = isPlaying ? "⏸" : "▶"; // Temporary text icons - REMOVED
+            // Correctly update the Symbol property of the nested icon
+            PlayPauseIcon.Symbol = isPlaying ? Wpf.Ui.Controls.SymbolRegular.Pause20 : Wpf.Ui.Controls.SymbolRegular.Play20;
+            PlayPauseButton.ToolTip = isPlaying
+                ? LocalizationManager.GetString("FloatingPlayer_PauseButton_ToolTip")
+                : LocalizationManager.GetString("FloatingPlayer_PlayButton_ToolTip");
 
-            // Загрузка обложки из потока или установка дефолтной
+            // Asynchronously load cover art from stream reference or set default
             BitmapImage bitmap = new BitmapImage();
             try
             {
-                if (thumbnail != null)
+                if (thumbnailRef != null)
                 {
-                    using (var stream = await thumbnail.OpenReadAsync()) // Открываем поток асинхронно
+                    using (var stream = await thumbnailRef.OpenReadAsync())
                     {
                         bitmap.BeginInit();
                         bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                        // Используем AsStreamForRead() для совместимости с WPF
-                        bitmap.StreamSource = stream.AsStreamForRead(); 
+                        bitmap.StreamSource = stream.AsStreamForRead(); // Use AsStreamForRead for WPF compatibility
                         bitmap.EndInit();
                         Debug.WriteLine("Successfully loaded cover art from SMTC thumbnail stream.");
                     }
                 }
                 else
                 {
-                    // Ставим обложку по умолчанию, если миниатюры нет
                     bitmap.BeginInit();
                     bitmap.UriSource = DefaultCoverUri;
                     bitmap.EndInit();
-                    Debug.WriteLine("SMTC thumbnail is null, using default cover.");
+                    Debug.WriteLine("SMTC thumbnailRef is null, using default cover.");
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error loading cover art from SMTC thumbnail: {ex.Message}");
-                // Ставим обложку по умолчанию при ошибке
+                Debug.WriteLine($"Error loading cover art from SMTC thumbnailRef: {ex.Message}");
                 bitmap.BeginInit();
                 bitmap.UriSource = DefaultCoverUri;
                 bitmap.EndInit();
             }
-            CoverArtImage.Source = bitmap; // Устанавливаем загруженную (или дефолтную) картинку
+            CoverArtImage.Source = bitmap; // Set the loaded or default image
 
-            // --- Логирование перед обновлением ProgressBar ---
-            Debug.WriteLine($"[FloatingPlayer] UpdateContent - Received Times: Current={currentPosition}, Total={totalDuration}, Status={status}");
+            // --- Logging before updating ProgressBar ---
+            Debug.WriteLine($"[FloatingPlayer] UpdateContentInternal - Received Times: Current={currentPosition}, Total={maxPosition}, Status={status}");
 
-            // Обработка времени и управление таймером
-            if (totalDuration.HasValue && totalDuration.Value > TimeSpan.Zero)
+            // Handle time and timer management
+            if (maxPosition > 0 && currentPosition >= 0 && currentPosition <= maxPosition)
             {
-                _totalDuration = totalDuration.Value;
-                _lastKnownPosition = currentPosition ?? TimeSpan.Zero;
+                _totalDuration = TimeSpan.FromSeconds(maxPosition);
+                _lastKnownPosition = TimeSpan.FromSeconds(currentPosition);
                 _lastPositionUpdateTime = DateTime.UtcNow;
 
                 TrackProgressBar.Maximum = _totalDuration.TotalSeconds;
                 TrackProgressBar.Value = _lastKnownPosition.TotalSeconds;
                 TrackProgressBar.Visibility = Visibility.Visible;
 
-                if (status == MediaPlaybackStatus.Playing)
+                if (status == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing)
                 {
                     _progressTimer?.Start();
                     Debug.WriteLine("[FloatingPlayer] Progress timer started.");
@@ -121,15 +154,13 @@ namespace CustomMediaRPC.Views
                 {
                     _progressTimer?.Stop();
                     Debug.WriteLine("[FloatingPlayer] Progress timer stopped.");
-                    // При паузе/остановке значение уже установлено правильно
                 }
             }
             else
             {
-                // Скрыть ProgressBar и остановить таймер, если длительность неизвестна
                 TrackProgressBar.Visibility = Visibility.Collapsed;
                 TrackProgressBar.Value = 0; 
-                TrackProgressBar.Maximum = 100; // Сброс на всякий случай
+                TrackProgressBar.Maximum = 100;
                 _progressTimer?.Stop();
                 _totalDuration = TimeSpan.Zero;
                  Debug.WriteLine("[FloatingPlayer] Progress timer stopped (no duration).");
@@ -177,13 +208,20 @@ namespace CustomMediaRPC.Views
         private void PlayPauseButton_Click(object sender, RoutedEventArgs e)
         {
             PlayPauseToggleRequested?.Invoke(this, EventArgs.Empty);
-             Debug.WriteLine("Play/Pause button clicked");
-       }
+            Debug.WriteLine("Play/Pause button clicked");
+        }
 
         private void NextButton_Click(object sender, RoutedEventArgs e)
         {
             NextRequested?.Invoke(this, EventArgs.Empty);
             Debug.WriteLine("Next button clicked");
+        }
+
+        // Обработчик клика по кнопке скрыть
+        private void HideButton_Click(object sender, RoutedEventArgs e)
+        {
+            Debug.WriteLine("Hide button clicked");
+            HideRequested?.Invoke(this, EventArgs.Empty); // Вызываем событие
         }
     }
 } 

@@ -3,6 +3,7 @@ using System.Linq;
 using DiscordRPC;
 using CustomMediaRPC.Utils;
 using Windows.Storage.Streams;
+using CustomMediaRPC.Services;
 
 namespace CustomMediaRPC.Models;
 
@@ -49,10 +50,10 @@ public class MediaState
     {
         return Status switch
         {
-            MediaPlaybackStatus.Playing => "Playing",
-            MediaPlaybackStatus.Paused => "Paused",
-            MediaPlaybackStatus.Stopped => "Stopped",
-            _ => "Unknown"
+            MediaPlaybackStatus.Playing => LocalizationManager.GetString("PlaybackStatus_Playing"),
+            MediaPlaybackStatus.Paused => LocalizationManager.GetString("PlaybackStatus_Paused"),
+            MediaPlaybackStatus.Stopped => LocalizationManager.GetString("PlaybackStatus_Stopped"),
+            _ => LocalizationManager.GetString("PlaybackStatus_Unknown")
         };
     }
 

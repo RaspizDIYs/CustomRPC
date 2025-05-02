@@ -1,0 +1,319 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="MainWindow_Title" xml:space="preserve">
+    <value>MediaPresence</value>
+    <comment>Оставим название</comment>
+  </data>
+  <data name="SettingsWindow_Title" xml:space="preserve">
+    <value>Настройки</value>
+  </data>
+   <data name="Language" xml:space="preserve">
+    <value>Язык</value>
+  </data>
+  <data name="RestartRequired" xml:space="preserve">
+    <value>Требуется перезапуск</value>
+    <comment>Tooltip or message indicating app restart is needed</comment>
+  </data>
+   <data name="RestartRequiredMessage" xml:space="preserve">
+    <value>Пожалуйста, перезапустите приложение, чтобы смена языка полностью вступила в силу.</value>
+  </data>
+    <data name="OK" xml:space="preserve">
+    <value>ОК</value>
+  </data>
+  <!-- Add more strings here -->
+  
+   <!-- MainWindow -->
+  <data name="TrayIcon_ToolTip" xml:space="preserve">
+    <value>MediaPresence</value>
+  </data>
+   <data name="TrayMenu_Show" xml:space="preserve">
+    <value>Показать</value>
+  </data>
+   <data name="TrayMenu_Exit" xml:space="preserve">
+    <value>Выход</value>
+  </data>
+   <data name="SelectMediaSource" xml:space="preserve">
+    <value>Выберите источник медиа:</value>
+  </data>
+  <data name="ConnectButton" xml:space="preserve">
+    <value>Подключить</value>
+  </data>
+  <data name="DisconnectButton" xml:space="preserve">
+    <value>Отключить</value>
+  </data>
+  <data name="SettingsButton_ToolTip" xml:space="preserve">
+    <value>Настройки</value>
+  </data>
+  <data name="ThemeCycleButton_ToolTip" xml:space="preserve">
+    <value>Сменить тему</value>
+  </data>
+  <data name="CopyDebugInfoButton_ToolTip" xml:space="preserve">
+    <value>Скопировать отладочную информацию</value>
+  </data>
+   <data name="CopyDebugInfoButton_Content" xml:space="preserve">
+    <value>ID</value>
+  </data>
+  <data name="EnableCoverArtCheckBox" xml:space="preserve">
+    <value>Загружать обложки</value>
+  </data>
+    <data name="CoverArtSource_Spotify" xml:space="preserve">
+    <value>Spotify (недоступен в РФ)</value>
+  </data>
+    <data name="CoverArtSource_Deezer" xml:space="preserve">
+    <value>Deezer</value>
+  </data>
+  <data name="UseCustomCoverCheckBox" xml:space="preserve">
+    <value>Использовать свой URL обложки по умолчанию:</value>
+  </data>
+  <data name="LinkButtonsExpander_Header" xml:space="preserve">
+    <value>Выберите кнопки-ссылки</value>
+  </data>
+  <data name="LinkButton_Spotify" xml:space="preserve">
+    <value>Spotify</value>
+  </data>
+  <data name="LinkButton_YouTubeMusic" xml:space="preserve">
+    <value>YouTube Music</value>
+  </data>
+  <data name="LinkButton_AppleMusic" xml:space="preserve">
+    <value>Apple Music</value>
+  </data>
+  <data name="LinkButton_YandexMusic" xml:space="preserve">
+    <value>Яндекс Музыка</value>
+  </data>
+  <data name="LinkButton_Deezer" xml:space="preserve">
+    <value>Deezer</value>
+  </data>
+  <data name="LinkButton_VkMusic" xml:space="preserve">
+    <value>VK Музыка</value>
+  </data>
+  <data name="LinkButton_GitHub" xml:space="preserve">
+    <value>Скачать проект</value>
+  </data>
+  <data name="StatusTextBlock_Initializing" xml:space="preserve">
+    <value>Инициализация...</value>
+  </data>
+  <data name="DevelopersHyperlink" xml:space="preserve">
+    <value>Разработчики</value>
+  </data>
+  <data name="VersionTextBlock_ToolTip" xml:space="preserve">
+    <value>Показать Changelog</value>
+  </data>
+  
+  <!-- Messages & Statuses (used in C# code) -->
+   <data name="Status_NoMediaSession" xml:space="preserve">
+    <value>Активная медиа-сессия не найдена. Включите музыку!</value>
+  </data>
+  <data name="Status_Connecting" xml:space="preserve">
+    <value>Подключение к Discord....</value>
+  </data>
+  <data name="Status_Connected" xml:space="preserve">
+    <value>Подключено к Discord. Rich Presence активен.</value>
+  </data>
+  <data name="Status_ConnectedPaused" xml:space="preserve">
+    <value>Подключено к Discord. Медиа на паузе.</value>
+  </data>
+  <data name="Status_Disconnected" xml:space="preserve">
+    <value>Отключено от Discord.</value>
+  </data>
+   <data name="Status_Error" xml:space="preserve">
+    <value>Ошибка: {0}</value>
+    <comment>{0} - сообщение об ошибке</comment>
+  </data>
+   <data name="Status_SpotifyAuthNeeded" xml:space="preserve">
+    <value>Требуется аутентификация Spotify. Проверьте настройки.</value>
+  </data>
+  <data name="Status_SpotifyError" xml:space="preserve">
+    <value>Ошибка Spotify: {0}</value>
+    <comment>{0} - сообщение об ошибке Spotify</comment>
+  </data>
+   <data name="DebugInfoCopied" xml:space="preserve">
+    <value>Отладочная информация скопирована в буфер обмена.</value>
+  </data>
+  
+  <!-- AboutWindow -->
+  <data name="AboutWindow_Title" xml:space="preserve">
+    <value>О MediaPresence</value>
+  </data>
+   <data name="AboutWindow_AppName" xml:space="preserve">
+    <value>MediaPresence</value>
+    <comment>Название приложения</comment>
+  </data>
+   <data name="AboutWindow_Version" xml:space="preserve">
+    <value>Версия {0}</value>
+    <comment>{0} - номер версии, например 1.2.3</comment>
+  </data>
+  <data name="AboutWindow_Description" xml:space="preserve">
+    <value>Приложение для отображения вашей текущей воспроизводимой медиа из различных источников в виде Rich Presence в Discord.</value>
+  </data>
+   <data name="AboutWindow_GitHubRepo" xml:space="preserve">
+    <value>Репозиторий GitHub</value>
+  </data>
+   <data name="AboutWindow_ReportIssue" xml:space="preserve">
+    <value>Сообщить о проблеме</value>
+  </data>
+   <data name="AboutWindow_DonateButton" xml:space="preserve">
+    <value>Поддержать</value>
+  </data>
+   <data name="AboutWindow_DevelopedBy" xml:space="preserve">
+    <value>Разработано</value>
+  </data>
+   <data name="AboutWindow_DeveloperName" xml:space="preserve">
+    <value>Mejaikin &amp; Spellov</value>
+    <comment>Имя разработчика</comment>
+  </data>
+   <data name="AboutWindow_IconsBy" xml:space="preserve">
+    <value>Иконки от</value>
+  </data>
+  
+  <!-- ChangelogWindow -->
+   <data name="ChangelogWindow_Title" xml:space="preserve">
+    <value>Список изменений</value>
+  </data>
+   <data name="Changelog_StatusLoading" xml:space="preserve">
+    <value>Загрузка списка изменений...</value>
+  </data>
+   <data name="Changelog_ErrorNoReleases" xml:space="preserve">
+    <value>Не найдено релизов на GitHub.</value>
+  </data>
+   <data name="Changelog_ErrorHttp" xml:space="preserve">
+    <value>Ошибка загрузки списка изменений: {0}
+Подробности: {1}</value>
+    <comment>{0} = Код ошибки HTTP, {1} = Подробности</comment>
+  </data>
+   <data name="Changelog_ErrorNetwork" xml:space="preserve">
+    <value>Сетевая ошибка при загрузке списка изменений: {0}</value>
+    <comment>{0} = Сообщение исключения</comment>
+  </data>
+    <data name="Changelog_ErrorParsing" xml:space="preserve">
+    <value>Ошибка разбора данных списка изменений: {0}</value>
+     <comment>{0} = Сообщение исключения</comment>
+  </data>
+    <data name="Changelog_ErrorUnexpected" xml:space="preserve">
+    <value>Произошла непредвиденная ошибка: {0}</value>
+     <comment>{0} = Сообщение исключения</comment>
+  </data>
+  
+  <!-- FloatingPlayerWindow -->
+  <data name="FloatingPlayer_PlayButton_ToolTip" xml:space="preserve">
+    <value>Воспроизвести</value>
+  </data>
+   <data name="FloatingPlayer_PauseButton_ToolTip" xml:space="preserve">
+    <value>Пауза</value>
+  </data>
+   <data name="FloatingPlayer_PreviousButton_ToolTip" xml:space="preserve">
+    <value>Предыдущий</value>
+  </data>
+   <data name="FloatingPlayer_NextButton_ToolTip" xml:space="preserve">
+    <value>Следующий</value>
+  </data>
+   <data name="FloatingPlayer_HideButton_ToolTip" xml:space="preserve">
+    <value>Скрыть плеер</value>
+  </data>
+  <data name="Status_MediaControlsInitialized" xml:space="preserve">
+    <value>Управление медиа инициализировано. Выберите источник или ожидайте...</value>
+  </data>
+  <data name="Status_ConnectedAsUser" xml:space="preserve">
+    <value>Подключен как {0}</value>
+    <comment>{0} - имя пользователя</comment>
+  </data>
+  <data name="PlaybackStatus_Playing" xml:space="preserve">
+    <value>Воспроизводится</value>
+  </data>
+  <data name="PlaybackStatus_Paused" xml:space="preserve">
+    <value>На паузе</value>
+  </data>
+  <data name="PlaybackStatus_Stopped" xml:space="preserve">
+    <value>Остановлено</value>
+  </data>
+  <data name="PlaybackStatus_Unknown" xml:space="preserve">
+    <value>Неизвестно</value>
+  </data>
+  <data name="Settings_General" xml:space="preserve">
+    <value>Общие</value>
+  </data>
+  <data name="Settings_FloatingPlayerHeader" xml:space="preserve">
+    <value>Плавающий плеер</value>
+  </data>
+  <data name="Settings_EnableFloatingPlayer" xml:space="preserve">
+    <value>Включить</value>
+  </data>
+  <data name="Settings_PlayerAlwaysOnTop" xml:space="preserve">
+    <value>Поверх всех окон</value>
+  </data>
+  <data name="Settings_GeneralHeader" xml:space="preserve">
+    <value>Общие</value>
+  </data>
+  <data name="Settings_LaunchOnStartup" xml:space="preserve">
+    <value>Запускать при старте Windows</value>
+  </data>
+  <data name="Settings_UpdatesHeader" xml:space="preserve">
+    <value>Обновления</value>
+  </data>
+  <data name="Settings_AutoCheckUpdates" xml:space="preserve">
+    <value>Проверять обновления при запуске</value>
+  </data>
+  <data name="Settings_SilentUpdates" xml:space="preserve">
+    <value>Обновлять автоматически без запроса</value>
+  </data>
+  <data name="Settings_CheckUpdatesNow" xml:space="preserve">
+    <value>Проверить обновления сейчас</value>
+  </data>
+</root> 

@@ -28,6 +28,9 @@ using System.Reflection; // Для получения версии
 using CustomMediaRPC.Views;
 using CustomMediaRPC.Services; // Возвращаем обратно
 using Windows.Storage.Streams; // Добавляем using
+using System.Net.Http.Headers;
+using System.Text.Json.Serialization;
+using CustomMediaRPC.Properties; // Add this for direct access to resources
 
 namespace CustomMediaRPC.Views;
 
@@ -92,6 +95,10 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         
         // Устанавливаем DataContext на сам объект MainWindow
         this.DataContext = this; 
+        
+        // --- Populate Cover Art Source ComboBox --- 
+        PopulateCoverArtSourceComboBox(); 
+        // -----------------------------------------
         
         // --- Получение и отображение версии --- 
         try
@@ -195,11 +202,30 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         FloatingPlayerService.Instance.NextRequested += FloatingPlayer_NextRequested;
     }
 
+    // New method to populate the ComboBox
+    private void PopulateCoverArtSourceComboBox()
+    {
+        var sources = new List<string>
+        {
+            // Use Properties.Resources directly for simplicity here
+            // Alternatively, use LocalizationManager.GetString if preferred
+            Properties.Resources.CoverArtSource_Deezer, 
+            Properties.Resources.CoverArtSource_Spotify 
+        };
+        CoverArtSourceComboBox.ItemsSource = sources;
+        
+        // Ensure the initial SelectedValue matches the loaded setting
+        // The binding on SelectedValue should handle this automatically if the string values match exactly.
+        // If binding fails, uncomment the line below:
+        // CoverArtSourceComboBox.SelectedValue = _appSettings.CoverArtSource; 
+    }
+
     private void InitializeDiscord()
     {
-        if (_currentSession == null) 
+        if (_currentSession == null)
         {
-            UpdateStatusText("Please select a media source first.");
+            // Use resource for message
+            UpdateStatusText(LocalizationManager.GetString("Status_NoMediaSession")); 
             DebugLogger.Log("InitializeDiscord skipped: No source selected.");
             return;
         }
@@ -209,8 +235,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             DebugLogger.Log("Discord client already initialized.");
             return;
         }
-        
-        // --- Получаем Client ID ---
+
         string clientId;
         try
         {
@@ -218,79 +243,87 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         }
         catch (FormatException ex)
         {
-             UpdateStatusText("Error: Invalid embedded ClientID.");
-             System.Windows.MessageBox.Show($"Error decoding embedded ClientID: {ex.Message}. Please contact the developer.", 
-                                            "Configuration Error", 
-                                            System.Windows.MessageBoxButton.OK, 
+             // Use resource (consider adding a specific key)
+             UpdateStatusText(string.Format(LocalizationManager.GetString("Status_Error"), "Invalid embedded ClientID"));
+             System.Windows.MessageBox.Show($"Error decoding embedded ClientID: {ex.Message}. Please contact the developer.",
+                                            "Configuration Error",
+                                            System.Windows.MessageBoxButton.OK,
                                             System.Windows.MessageBoxImage.Error);
              return;
         }
         if (string.IsNullOrEmpty(clientId))
         {
-            UpdateStatusText("Error: ClientID is not configured (embedded).");
-            System.Windows.MessageBox.Show("Embedded Discord Client ID is missing. Please contact the developer.", 
-                                           "Configuration Error", 
-                                           System.Windows.MessageBoxButton.OK, 
+            // Use resource (consider adding a specific key)
+            UpdateStatusText(string.Format(LocalizationManager.GetString("Status_Error"), "ClientID is not configured (embedded)"));
+            System.Windows.MessageBox.Show("Embedded Discord Client ID is missing. Please contact the developer.",
+                                           "Configuration Error",
+                                           System.Windows.MessageBoxButton.OK,
                                            System.Windows.MessageBoxImage.Error);
             return;
         }
-        // -------------------------
 
-        _client = new DiscordRpcClient(clientId); // Используем раскодированный clientId
+        _client = new DiscordRpcClient(clientId);
         _client.Logger = new ConsoleLogger() { Level = LogLevel.Warning };
 
         _client.OnReady += (sender, e) =>
         {
-            Dispatcher.InvokeAsync(() => // Запускаем обновление UI в основном потоке
+            Dispatcher.InvokeAsync(() =>
             {
                 DebugLogger.Log($"Received Ready from user {e.User.Username}");
-                _isRpcConnected = true; // Обновляем состояние
-                UpdateStatusText($"Connected as {e.User.Username}"); // Обновляем текст СРАЗУ
-                UpdateButtonStates(); // Обновляем кнопки СРАЗУ
-
-                // Показываем плавающий плеер СРАЗУ, если он включен
-                if (_appSettings.EnableFloatingPlayer)
-                {
-                    DebugLogger.Log("[OnReady] Showing floating player because it's enabled in settings.");
-                    FloatingPlayerService.Instance.SetVisibility(true);
-                }
-
-                // Запускаем обновление Presence в фоновом потоке, не дожидаясь его
-                _ = Task.Run(async () => {
-                    try
-                    {
-                        MediaStateManager.Instance.SetLastSentPresence(null); // Сброс кэша presence
-                        if (MediaStateManager.Instance.SelectedLinkSites != null) 
-                        {
-                            MediaStateManager.Instance.SelectedLinkSites = new List<string>(_selectedLinkSites);
-                            DebugLogger.Log($"[OnReady Background] Copied selected sites to MediaStateManager: {string.Join(", ", _selectedLinkSites)}");
-                        }
-                        await UpdatePresenceFromSession(); // Запрашиваем первое обновление в фоне
-                        DebugLogger.Log("[OnReady Background] Initial presence update completed.");
-                    }
-                    catch (Exception bgEx)
-                    {
-                         DebugLogger.Log("[OnReady Background] Error during initial presence update.", bgEx);
-                    }
-                });
-
-                DebugLogger.Log("OnReady Dispatcher actions completed (UI updated, presence update started).");
+                _isRpcConnected = true;
+                // Use resource (consider adding a specific key for 'Connected as {username}')
+                UpdateStatusText(string.Format(LocalizationManager.GetString("Status_ConnectedAsUser"), e.User.Username));
+                UpdateButtonStates();
+                RequestPresenceUpdateDebounced(); // Update presence immediately on connect
             });
         };
 
-        _client.OnPresenceUpdate += (sender, e) =>
+        _client.OnError += (sender, e) =>
         {
-            DebugLogger.Log($"[DISCORD ---ms] Presence updated callback received!");
+            Dispatcher.InvokeAsync(() =>
+            {
+                // Corrected logging call to use a single string argument
+                DebugLogger.Log($"Discord RPC Error: {e.Message} (Code: {e.Code})"); 
+                // Use resource
+                UpdateStatusText(string.Format(LocalizationManager.GetString("Status_Error"), e.Message)); 
+                DisconnectDiscord(); // Disconnect on error
+            });
         };
 
-        _client.OnError += (sender, e) => {
-            DebugLogger.Log($"Discord Error: {e.Message} (Code: {e.Code})");
-            UpdateStatusText($"Discord Error: {e.Code}");
+        _client.OnConnectionFailed += (sender, e) =>
+        {
+             Dispatcher.InvokeAsync(() =>
+            {
+                DebugLogger.Log("Discord RPC Connection Failed");
+                // Use resource (consider adding a specific key)
+                UpdateStatusText("Failed to connect to Discord.");
+                DisconnectDiscord(); // Ensure cleanup
+            });
         };
 
+        _client.OnConnectionEstablished += (sender, e) =>
+        {
+            Dispatcher.InvokeAsync(() =>
+            {
+                DebugLogger.Log("Discord RPC Connection Established");
+                // Status text is usually handled by OnReady
+            });
+        };
+
+        _client.OnClose += (sender, e) =>
+        {
+            Dispatcher.InvokeAsync(() =>
+            {
+                DebugLogger.Log("Discord RPC Connection Closed");
+                // Use resource
+                UpdateStatusText(LocalizationManager.GetString("Status_Disconnected")); 
+                DisconnectDiscord(); // Ensure cleanup
+            });
+        };
+
+        // Use resource
+        UpdateStatusText(LocalizationManager.GetString("Status_Connecting")); 
         _client.Initialize();
-        UpdateStatusText("Connecting to Discord...");
-        UpdateButtonStates();
     }
 
     private async void InitializeMediaIntegration()
@@ -317,7 +350,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             }
 
             await UpdateSessionList();
-            UpdateStatusText("Media Controls initialized. Select a source or wait for media...");
+            UpdateStatusText(LocalizationManager.GetString("Status_MediaControlsInitialized"));
         }
         catch (Exception ex)
         {
@@ -593,7 +626,8 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                     case var op_gx when op_gx.StartsWith("operagx!"):
                          name = "Opera";
                          break;
-                     case var viv when viv.StartsWith("vivaldi!"): // Как раз твой случай
+                    case var viv when viv.StartsWith("vivaldi!"): // Как раз твой случай
+                    case var vivDot when vivDot.StartsWith("vivaldi."): // Добавляем проверку на точку
                          name = "Vivaldi";
                          break;
                     // Добавь сюда другие браузеры
@@ -931,8 +965,8 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                 LinkButtonsExpander.IsExpanded = false;
             }
 
-            // Блокируем кнопку Настроек
-            SettingsButton.IsEnabled = settingsEnabled;
+            // Блокируем кнопку Настроек - ВСЕГДА АКТИВНА
+            SettingsButton.IsEnabled = true;
 
             DebugLogger.Log($"UpdateButtonStates: sourceSelected={sourceSelected}, _isRpcConnected={_isRpcConnected}, canConnect={canConnect}, canDisconnect={canDisconnect}, SessionComboBox.IsEnabled={SessionComboBox.IsEnabled}, SettingsEnabled={settingsEnabled}");
         });
@@ -954,7 +988,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private void DevelopersHyperlink_Click(object sender, RoutedEventArgs e)
     {
         AboutWindow aboutWindow = new AboutWindow();
-        aboutWindow.ShowDialog(); // Открываем как модальное окно
+        aboutWindow.Show(); // Открываем как обычное окно
     }
 
     // --- Логика сворачивания/разворачивания в трей ---
@@ -1276,6 +1310,124 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                     _isCopyingDebugInfo = false; // Сбрасываем флаг
                 });
             }
+        }
+    }
+
+    // --- Вспомогательный класс для десериализации релизов GitHub ---
+    // Можно вынести в отдельный файл Models/GitHubRelease.cs, если хочешь
+    public class GitHubRelease
+    {
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("tag_name")]
+        public string? TagName { get; set; }
+
+        [JsonPropertyName("published_at")]
+        public DateTimeOffset PublishedAt { get; set; }
+
+        [JsonPropertyName("body")]
+        public string? Body { get; set; }
+
+        [JsonPropertyName("html_url")]
+        public string? HtmlUrl { get; set; } // Ссылка на релиз
+    }
+    // -------------------------------------------------------------
+
+    private async void VersionTextBlock_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        DebugLogger.Log("VersionTextBlock clicked. Fetching changelog...");
+        // Use resource for status
+        UpdateStatusText(LocalizationManager.GetString("Changelog_StatusLoading")); 
+        this.Cursor = System.Windows.Input.Cursors.Wait; // Меняем курсор
+
+        ChangelogWindow? changelogWindow = null;
+
+        try
+        {
+            var httpClient = _sharedHttpClient ?? new HttpClient();
+            httpClient.DefaultRequestHeaders.UserAgent.TryParseAdd("CustomMediaRPC-App");
+
+            string repoUrl = "https://api.github.com/repos/RaspizDIYs/CustomRPC/releases";
+            HttpResponseMessage response = await httpClient.GetAsync(repoUrl);
+
+            if (response.IsSuccessStatusCode)
+            {
+                string jsonResponse = await response.Content.ReadAsStringAsync();
+                var releases = JsonSerializer.Deserialize<List<GitHubRelease>>(jsonResponse);
+
+                if (releases != null && releases.Count > 0)
+                {
+                    // Успешно получили релизы, передаем список
+                    await Dispatcher.InvokeAsync(() =>
+                    {
+                        changelogWindow = new ChangelogWindow(releases.Take(10).ToList()) // Берем последние 10
+                        {
+                            Owner = this
+                        };
+                    });
+                }
+                else
+                {
+                    // Нет релизов - use resource
+                    string noReleasesMsg = LocalizationManager.GetString("Changelog_ErrorNoReleases");
+                    await Dispatcher.InvokeAsync(() =>
+                    {
+                        changelogWindow = new ChangelogWindow(noReleasesMsg)
+                        {
+                            Owner = this
+                        };
+                    });
+                }
+            }
+            else
+            {
+                // Ошибка HTTP - use resource
+                string errorDetails = await response.Content.ReadAsStringAsync();
+                string httpErrorMsg = string.Format(LocalizationManager.GetString("Changelog_ErrorHttp"), response.StatusCode, errorDetails);
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    changelogWindow = new ChangelogWindow(httpErrorMsg)
+                    {
+                        Owner = this
+                    };
+                });
+            }
+        }
+        catch (HttpRequestException httpEx)
+        {
+            DebugLogger.Log("Error fetching changelog (HTTP)", httpEx);
+            // Use resource
+            string networkErrorMsg = string.Format(LocalizationManager.GetString("Changelog_ErrorNetwork"), httpEx.Message);
+            await Dispatcher.InvokeAsync(() => { changelogWindow = new ChangelogWindow(networkErrorMsg) { Owner = this }; });
+        }
+        catch (JsonException jsonEx)
+        {
+             DebugLogger.Log("Error parsing changelog JSON", jsonEx);
+             // Use resource
+             string parsingErrorMsg = string.Format(LocalizationManager.GetString("Changelog_ErrorParsing"), jsonEx.Message);
+             await Dispatcher.InvokeAsync(() => { changelogWindow = new ChangelogWindow(parsingErrorMsg) { Owner = this }; });
+        }
+        catch (Exception ex)
+        {
+            DebugLogger.Log("Error fetching changelog (General)", ex);
+             // Use resource
+            string unexpectedErrorMsg = string.Format(LocalizationManager.GetString("Changelog_ErrorUnexpected"), ex.Message);
+            await Dispatcher.InvokeAsync(() => { changelogWindow = new ChangelogWindow(unexpectedErrorMsg) { Owner = this }; });
+        }
+        finally
+        {
+             // Восстанавливаем статус и курсор
+            // Restore previous status (might need to store it)
+            // For now, just clear or set to default connected/disconnected
+             UpdateStatusText(_isRpcConnected ? LocalizationManager.GetString("Status_Connected") : LocalizationManager.GetString("Status_Disconnected"));
+            this.Cursor = null; // Возвращаем обычный курсор
+
+            // Показываем окно, если оно было создано
+            await Dispatcher.InvokeAsync(() =>
+            {
+                changelogWindow?.Show();
+            });
         }
     }
 }

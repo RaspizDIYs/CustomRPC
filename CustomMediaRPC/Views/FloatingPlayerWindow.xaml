@@ -3,10 +3,12 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:CustomMediaRPC.Views"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:properties="clr-namespace:CustomMediaRPC.Properties"
         mc:Ignorable="d"
         Title="Floating Player"
-        Width="230"
+        Width="250"
         Height="80"
         AllowsTransparency="True"
         WindowStyle="None"
@@ -15,76 +17,145 @@
         Topmost="True"
         ResizeMode="NoResize"
         MouseDown="Window_MouseDown">
-    <Border Background="#DD222222" CornerRadius="5" BorderThickness="1" BorderBrush="#55FFFFFF" Padding="2">
-        <Grid Margin="3">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
 
-            <!-- Обложка -->
-            <Border Grid.Row="0" Grid.Column="0" Width="50" Height="50" CornerRadius="4" Margin="0,0,8,0" Background="#333333">
-                <Image x:Name="CoverArtImage" Stretch="UniformToFill">
-                    <Image.Clip>
-                        <RectangleGeometry RadiusX="4" RadiusY="4" Rect="0,0,50,50"/>
-                    </Image.Clip>
-                </Image>
-            </Border>
+    <!-- Основной Grid, который ловит MouseOver -->
+    <Grid x:Name="MainGrid" Background="Transparent">
+        <Grid.Triggers>
+            <!-- Триггер при наведении мыши -->
+            <EventTrigger RoutedEvent="Grid.MouseEnter">
+                <BeginStoryboard>
+                    <Storyboard>
+                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="HideButton" Storyboard.TargetProperty="Visibility">
+                            <DiscreteObjectKeyFrame KeyTime="0:0:0" Value="{x:Static Visibility.Visible}"/>
+                        </ObjectAnimationUsingKeyFrames>
+                    </Storyboard>
+                </BeginStoryboard>
+            </EventTrigger>
+            <!-- Триггер когда мышь уходит -->
+            <EventTrigger RoutedEvent="Grid.MouseLeave">
+                <BeginStoryboard>
+                    <Storyboard>
+                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="HideButton" Storyboard.TargetProperty="Visibility">
+                            <DiscreteObjectKeyFrame KeyTime="0:0:0" Value="{x:Static Visibility.Collapsed}"/>
+                        </ObjectAnimationUsingKeyFrames>
+                    </Storyboard>
+                </BeginStoryboard>
+            </EventTrigger>
+        </Grid.Triggers>
+        
+        <!-- Рамка с фоном и содержимым плеера -->
+        <Border Background="#DD222222" CornerRadius="5" BorderThickness="1" BorderBrush="#55FFFFFF" Padding="2">
+            <Grid Margin="3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-            <!-- Название, Артист и Кнопки -->
-            <StackPanel Grid.Row="0" Grid.Column="1" VerticalAlignment="Center">
-                <TextBlock x:Name="TitleTextBlock"
-                           Text="Unknown Title"
-                           Foreground="White"
-                           FontWeight="SemiBold"
-                           FontSize="12"
-                           TextTrimming="CharacterEllipsis"
-                           Margin="0,0,0,1"/>
-                <TextBlock x:Name="ArtistTextBlock"
-                           Text="Unknown Artist"
-                           Foreground="#BBBBBB"
-                           FontSize="11"
-                           TextTrimming="CharacterEllipsis"
-                           Margin="0,0,0,3"/>
-                <!-- Кнопки управления -->
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                    <Button x:Name="PreviousButton"
-                            Click="PreviousButton_Click"
-                            Width="22" Height="22" Margin="0,0,5,0"
-                            Padding="0" BorderThickness="0" Background="Transparent">
-                        <ui:SymbolIcon Symbol="Previous20" Foreground="White"/>
-                    </Button>
-                    <Grid Width="22" Margin="5,0,5,0">
-                        <Button x:Name="PlayPauseButton"
-                                Click="PlayPauseButton_Click"
-                                Width="22" Height="22"
-                                Padding="0" BorderThickness="0" Background="Transparent">
-                            <ui:SymbolIcon x:Name="PlayPauseIcon" Symbol="Play20" Foreground="White"/>
+                <!-- Обложка -->
+                <Border Grid.Row="0" Grid.Column="0" Width="50" Height="50" CornerRadius="4" Margin="0,0,8,0" Background="#333333">
+                    <Image x:Name="CoverArtImage" Stretch="UniformToFill">
+                        <Image.Clip>
+                            <RectangleGeometry RadiusX="4" RadiusY="4" Rect="0,0,50,50"/>
+                        </Image.Clip>
+                    </Image>
+                </Border>
+
+                <!-- Название, Артист и Кнопки -->
+                <StackPanel Grid.Row="0" Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock x:Name="TitleTextBlock"
+                               Text="Track Title"
+                               Foreground="White"
+                               FontWeight="SemiBold"
+                               FontSize="12"
+                               TextTrimming="CharacterEllipsis"
+                               Margin="0,0,0,1"
+                               ToolTip="{Binding Text, ElementName=TitleTextBlock}"/>
+                    <TextBlock x:Name="ArtistTextBlock"
+                               Text="Artist Name"
+                               Foreground="#AAAAAA"
+                               FontSize="11"
+                               TextTrimming="CharacterEllipsis"
+                               Margin="0,0,0,3"
+                               ToolTip="{Binding Text, ElementName=ArtistTextBlock}"/>
+                    <!-- Кнопки управления -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,5,0,0">
+                        <Button x:Name="PreviousButton"
+                                Click="PreviousButton_Click"
+                                ToolTip="{x:Static properties:Resources.FloatingPlayer_PreviousButton_ToolTip}"
+                                Style="{StaticResource PlayerButtonStyle}">
+                             <ui:SymbolIcon Symbol="Previous20" />
                         </Button>
-                    </Grid>
-                    <Button x:Name="NextButton"
-                            Click="NextButton_Click"
-                            Width="22" Height="22" Margin="5,0,0,0"
-                            Padding="0" BorderThickness="0" Background="Transparent">
-                        <ui:SymbolIcon Symbol="Next20" Foreground="White"/>
-                    </Button>
+                        <Grid Width="22" Margin="5,0,5,0">
+                            <Button x:Name="PlayPauseButton"
+                                    Click="PlayPauseButton_Click"
+                                    ToolTip="Play"
+                                    Style="{StaticResource PlayerButtonStyle}">
+                                <ui:SymbolIcon x:Name="PlayPauseIcon" Symbol="Play20" />
+                           </Button>
+                        </Grid>
+                        <Button x:Name="NextButton"
+                                Click="NextButton_Click"
+                                ToolTip="{x:Static properties:Resources.FloatingPlayer_NextButton_ToolTip}"
+                                Style="{StaticResource PlayerButtonStyle}">
+                            <ui:SymbolIcon Symbol="Next20" />
+                        </Button>
+                    </StackPanel>
                 </StackPanel>
-            </StackPanel>
 
-            <!-- Прогресс Бар -->
-            <ProgressBar x:Name="TrackProgressBar"
-                         Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
-                         Height="4"
-                         Margin="0,6,0,0"
-                         Background="#66333333"
-                         Foreground="#AAFFFFFF"
-                         BorderThickness="0"
-                         Minimum="0"
-                         Maximum="100" />
-        </Grid>
-    </Border>
+                <!-- Прогресс Бар -->
+                <ProgressBar x:Name="TrackProgressBar"
+                             Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                             Height="4"
+                             Margin="0,3,0,0"
+                             Background="#66333333"
+                             Foreground="#AAFFFFFF"
+                             BorderThickness="0"
+                             Minimum="0"
+                             Maximum="100" />
+            </Grid>
+        </Border>
+        
+        <!-- Кнопка скрыть (поверх всего) -->
+        <Button x:Name="HideButton"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Margin="0,2,2,0" 
+                Width="16"
+                Height="16"
+                Padding="0"
+                BorderThickness="0"
+                Foreground="#AAAAAA"
+                Background="Transparent"
+                FontWeight="Bold"
+                FontSize="10"
+                Content="–" 
+                ToolTip="{x:Static properties:Resources.FloatingPlayer_HideButton_ToolTip}"
+                Visibility="Collapsed"
+                Click="HideButton_Click">
+            <Button.Style>
+                <Style TargetType="Button">
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="Button">
+                                <!-- Убираем стандартный фон и рамку -->
+                                <Border Background="{TemplateBinding Background}">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                    <Style.Triggers>
+                        <!-- При наведении на саму кнопку делаем ее чуть ярче (опционально) -->
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Foreground" Value="White"/>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </Button.Style>
+        </Button>
+    </Grid>
 </Window> 

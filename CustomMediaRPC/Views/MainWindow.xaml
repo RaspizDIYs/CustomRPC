@@ -6,8 +6,9 @@
         xmlns:local="clr-namespace:CustomMediaRPC.Views"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:tb="http://www.hardcodet.net/taskbar"
+        xmlns:properties="clr-namespace:CustomMediaRPC.Properties"
         mc:Ignorable="d"
-        Title="MediaPresence"
+        Title="{x:Static properties:Resources.MainWindow_Title}"
         Height="500" Width="400" 
         MinHeight="420" MinWidth="400"
         ResizeMode="NoResize" WindowStartupLocation="CenterScreen"
@@ -16,21 +17,32 @@
 
     <ui:FluentWindow.Resources>
         <local:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <!-- Стиль для кликабельного TextBlock -->
+        <Style x:Key="ClickableTextBlockStyle" TargetType="TextBlock">
+            <Setter Property="TextDecorations" Value="Underline"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </ui:FluentWindow.Resources>
 
     <DockPanel>
         <tb:TaskbarIcon
             x:Name="MyNotifyIcon"
             IconSource="/favicon.ico"
-            ToolTipText="MediaPresence"
+            ToolTipText="{x:Static properties:Resources.TrayIcon_ToolTip}"
             TrayMouseDoubleClick="NotifyIcon_TrayMouseDoubleClick"
             Visibility="Collapsed">
 
             <tb:TaskbarIcon.ContextMenu>
                 <ContextMenu>
-                    <MenuItem Header="Показать" Click="MenuItemShow_Click"/>
+                    <MenuItem Header="{x:Static properties:Resources.TrayMenu_Show}" Click="MenuItemShow_Click"/>
                     <Separator/>
-                    <MenuItem Header="Выход" Click="MenuItemExit_Click"/>
+                    <MenuItem Header="{x:Static properties:Resources.TrayMenu_Exit}" Click="MenuItemExit_Click"/>
                 </ContextMenu>
             </tb:TaskbarIcon.ContextMenu>
         </tb:TaskbarIcon>
@@ -50,22 +62,22 @@
             </Grid.RowDefinitions>
             
             <StackPanel Grid.Row="1" Orientation="Vertical" HorizontalAlignment="Left" Margin="0,5,0,5">
-                <ui:TextBlock Text="Select Media Source:" Margin="5,0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                <ui:TextBlock Text="{x:Static properties:Resources.SelectMediaSource}" Margin="5,0" Style="{StaticResource BodyStrongTextBlockStyle}"/>
                 <StackPanel Orientation="Horizontal">
                     <ComboBox x:Name="SessionComboBox"
                               Width="350"
                               SelectionChanged="SessionComboBox_SelectionChanged" Margin="5"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="5,5,0,5">
-                    <ui:Button x:Name="ConnectButton" Content="Connect" Width="100" Margin="0,0,5,0" Click="ConnectButton_Click" Appearance="Primary" IsEnabled="False"/>
-                    <ui:Button x:Name="DisconnectButton" Content="Disconnect" Width="100" Margin="0,0,5,0" Click="DisconnectButton_Click" IsEnabled="False"/>
+                    <ui:Button x:Name="ConnectButton" Content="{x:Static properties:Resources.ConnectButton}" Width="110" Margin="0,0,5,0" Click="ConnectButton_Click" Appearance="Primary" IsEnabled="False"/>
+                    <ui:Button x:Name="DisconnectButton" Content="{x:Static properties:Resources.DisconnectButton}" Width="110" Margin="0,0,5,0" Click="DisconnectButton_Click" IsEnabled="False"/>
                     <ui:Button x:Name="SettingsButton"
                                Icon="{ui:SymbolIcon Settings24}"
                                Click="SettingsButton_Click" 
                                Appearance="Transparent"
                                BorderThickness="0"
                                Background="Transparent"
-                               ToolTip="Настройки"
+                               ToolTip="{x:Static properties:Resources.SettingsButton_ToolTip}"
                                Margin="5,0,5,0"/>
                     <ui:Button x:Name="ThemeCycleButton" 
                                Icon="{ui:SymbolIcon WeatherMoon24}"
@@ -73,16 +85,16 @@
                                Appearance="Transparent" 
                                BorderThickness="0"
                                Background="Transparent"
-                               ToolTip="Сменить тему"
+                               ToolTip="{x:Static properties:Resources.ThemeCycleButton_ToolTip}"
                                Margin="0,0,0,0"/>
                     <!-- Новая кнопка копирования -->
                     <ui:Button x:Name="CopyDebugInfoButton"
-                               Content="ID"
+                               Content="{x:Static properties:Resources.CopyDebugInfoButton_Content}"
                                Click="CopyDebugInfoButton_Click" 
                                Appearance="Transparent"
                                BorderThickness="0"
                                Background="Transparent"
-                               ToolTip="Скопировать ID"
+                               ToolTip="{x:Static properties:Resources.CopyDebugInfoButton_ToolTip}"
                                Margin="5,0,0,0"/>
                 </StackPanel>
 
@@ -90,7 +102,7 @@
                 <StackPanel Margin="0,10,0,0" VerticalAlignment="Top">
                     <!-- Новый общий чекбокс -->
                     <CheckBox x:Name="EnableCoverArtCheckBox"
-                              Content="Load album art"
+                              Content="{x:Static properties:Resources.EnableCoverArtCheckBox}"
                               IsChecked="{Binding CurrentAppSettings.EnableCoverArtFetching, Mode=TwoWay}"
                               Margin="0,5,0,0"/>
 
@@ -101,16 +113,17 @@
                               Margin="20,5,0,5" 
                               IsEnabled="{Binding IsChecked, ElementName=EnableCoverArtCheckBox}" 
                               SelectedValue="{Binding CurrentAppSettings.CoverArtSource, Mode=TwoWay}">
-                        <ComboBox.ItemsSource>
+                        <!-- ItemsSource will be set from code-behind -->
+                        <!-- <ComboBox.ItemsSource>
                             <x:Array Type="sys:String" xmlns:sys="clr-namespace:System;assembly=mscorlib">
-                                <sys:String>Deezer</sys:String>
-                                <sys:String>Spotify (unavailable in Russia)</sys:String>
+                                <sys:String>{x:Static properties:Resources.CoverArtSource_Deezer}</sys:String>
+                                <sys:String>{x:Static properties:Resources.CoverArtSource_Spotify}</sys:String>
                             </x:Array>
-                        </ComboBox.ItemsSource>
+                        </ComboBox.ItemsSource> -->
                     </ComboBox>
                     
                     <CheckBox x:Name="UseCustomCoverCheckBox" 
-                              Content="Use custom default cover URL:"
+                              Content="{x:Static properties:Resources.UseCustomCoverCheckBox}"
                               IsChecked="{Binding CurrentAppSettings.UseCustomDefaultCover, Mode=TwoWay}"
                               Margin="0,10,0,0"/>
                     <TextBox x:Name="CustomCoverUrlTextBox" 
@@ -120,29 +133,29 @@
                              Visibility="{Binding IsChecked, ElementName=UseCustomCoverCheckBox, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 </StackPanel>
                 
-                <Expander x:Name="LinkButtonsExpander" Header="Select link buttons" Margin="0,10,0,0" Width="360">
+                <Expander x:Name="LinkButtonsExpander" Header="{x:Static properties:Resources.LinkButtonsExpander_Header}" Margin="0,10,0,0" Width="360">
                     <ScrollViewer MaxHeight="75" VerticalScrollBarVisibility="Auto">
                         <UniformGrid Columns="2" Margin="0,0,0,0"> 
-                            <CheckBox x:Name="SpotifyLinkCheckBox" Content="Spotify" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
-                            <CheckBox x:Name="YouTubeMusicLinkCheckBox" Content="YouTube Music" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
-                            <CheckBox x:Name="AppleMusicLinkCheckBox" Content="Apple Music" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
-                            <CheckBox x:Name="YandexMusicLinkCheckBox" Content="Yandex Music" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
-                            <CheckBox x:Name="DeezerLinkCheckBox" Content="Deezer" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
-                            <CheckBox x:Name="VkMusicLinkCheckBox" Content="VK Music" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
-                            <CheckBox x:Name="GitHubLinkCheckBox" Content="Project Download" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                            <CheckBox x:Name="SpotifyLinkCheckBox" Content="{x:Static properties:Resources.LinkButton_Spotify}" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                            <CheckBox x:Name="YouTubeMusicLinkCheckBox" Content="{x:Static properties:Resources.LinkButton_YouTubeMusic}" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                            <CheckBox x:Name="AppleMusicLinkCheckBox" Content="{x:Static properties:Resources.LinkButton_AppleMusic}" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                            <CheckBox x:Name="YandexMusicLinkCheckBox" Content="{x:Static properties:Resources.LinkButton_YandexMusic}" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                            <CheckBox x:Name="DeezerLinkCheckBox" Content="{x:Static properties:Resources.LinkButton_Deezer}" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                            <CheckBox x:Name="VkMusicLinkCheckBox" Content="{x:Static properties:Resources.LinkButton_VkMusic}" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                            <CheckBox x:Name="GitHubLinkCheckBox" Content="{x:Static properties:Resources.LinkButton_GitHub}" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
                         </UniformGrid>
                     </ScrollViewer>
                 </Expander>
             </StackPanel>
 
-            <ui:TextBlock Grid.Row="2" x:Name="StatusTextBlock" Text="Initializing..." Margin="0,10,0,0" VerticalAlignment="Center" HorizontalAlignment="Center" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"/>
+            <ui:TextBlock Grid.Row="2" x:Name="StatusTextBlock" Text="{x:Static properties:Resources.StatusTextBlock_Initializing}" Margin="0,10,0,0" VerticalAlignment="Center" HorizontalAlignment="Center" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"/>
             
             <!-- Нижняя строка -->
             <Grid Grid.Row="3" Margin="0,5,0,5">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Bottom">
                     <TextBlock Margin="5,0,10,0" VerticalAlignment="Center">
                         <Hyperlink Foreground="{DynamicResource TextFillColorSecondaryBrush}" Click="DevelopersHyperlink_Click">
-                            Developers
+                            <Run Text="{x:Static properties:Resources.DevelopersHyperlink}"/>
                         </Hyperlink>
                     </TextBlock>
                 </StackPanel>
@@ -151,8 +164,10 @@
                            HorizontalAlignment="Right" 
                            VerticalAlignment="Bottom" 
                            Margin="0,0,5,0" 
+                           ToolTip="{x:Static properties:Resources.VersionTextBlock_ToolTip}"
                            Foreground="{DynamicResource TextFillColorSecondaryBrush}" 
-                           Style="{StaticResource CaptionTextBlockStyle}"/>
+                           Style="{StaticResource ClickableTextBlockStyle}"
+                           MouseLeftButtonDown="VersionTextBlock_MouseLeftButtonDown"/>
             </Grid>
         </Grid>
        

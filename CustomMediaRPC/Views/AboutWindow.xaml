@@ -5,12 +5,13 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:CustomMediaRPC"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:properties="clr-namespace:CustomMediaRPC.Properties"
         mc:Ignorable="d"
-        Title="О разработчиках" 
-        Height="180" Width="300"
-        MinHeight="180" MinWidth="300"
-        ResizeMode="NoResize" 
-        WindowStartupLocation="CenterOwner" 
+        Title="{x:Static properties:Resources.AboutWindow_Title}"
+        Height="260" Width="400"
+        MinHeight="200" MinWidth="350"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
         ExtendsContentIntoTitleBar="True"
         WindowBackdropType="Mica">
     <DockPanel>
@@ -20,20 +21,43 @@
                      ShowMinimize="False"
                      CloseWindowByDoubleClickOnIcon="True">
         </ui:TitleBar>
-        <Grid Margin="0,10,0,10">
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Orientation="Vertical">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
-                    <TextBlock Text="Mejaikin" VerticalAlignment="Center"/>
-                    <TextBlock FontWeight="Bold" FontSize="18" Margin="5">X</TextBlock>
-                    <TextBlock Text="Spellov" VerticalAlignment="Center"/>
+        <Grid Margin="15,10,15,10"> 
+            <StackPanel VerticalAlignment="Top">
+
+                <TextBlock Text="{x:Static properties:Resources.AboutWindow_Description}" 
+                           TextWrapping="Wrap" 
+                           TextAlignment="Center"
+                           Margin="0,0,0,15"/>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,5">
+                    <TextBlock VerticalAlignment="Center">
+                        <Hyperlink NavigateUri="https://github.com/RaspizDIYs/CustomRPC" RequestNavigate="Hyperlink_RequestNavigate">
+                            <Run Text="{x:Static properties:Resources.AboutWindow_GitHubRepo}"/>
+                        </Hyperlink>
+                    </TextBlock>
+                    <TextBlock Text="|" Margin="10,0" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                    <TextBlock VerticalAlignment="Center">
+                        <Hyperlink NavigateUri="https://github.com/RaspizDIYs/CustomRPC/issues" RequestNavigate="Hyperlink_RequestNavigate">
+                             <Run Text="{x:Static properties:Resources.AboutWindow_ReportIssue}"/>
+                        </Hyperlink>
+                    </TextBlock>
                 </StackPanel>
-                <ui:Button x:Name="DonateButtonAbout" 
-                           Content="Fund ❤️"
-                           Width="120" 
-                           Click="DonateButtonAbout_Click" 
-                           Icon="Heart24"
+                 <ui:Button x:Name="DonateButtonAbout"
+                           Content="{x:Static properties:Resources.AboutWindow_DonateButton}"
+                           Margin="0,10,0,15"
+                           Width="140"
+                           Click="DonateButtonAbout_Click"
+                           Icon="{ui:SymbolIcon Heart24}"
                            HorizontalAlignment="Center"
                            Appearance="Primary"/>
+
+                <TextBlock Text="{x:Static properties:Resources.AboutWindow_DevelopedBy}" 
+                           HorizontalAlignment="Center" 
+                           FontSize="10"/>
+                <TextBlock Text="{x:Static properties:Resources.AboutWindow_DeveloperName}" 
+                           HorizontalAlignment="Center" 
+                           FontWeight="SemiBold" 
+                           FontSize="10"/>
             </StackPanel>
         </Grid>
     </DockPanel>

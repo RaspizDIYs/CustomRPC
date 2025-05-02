@@ -1,7 +1,14 @@
+using System.IO;
+
 namespace CustomMediaRPC.Utils;
 
 public static class Constants
 {
+    public static readonly string SettingsPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "CustomMediaRPC",
+        "settings.json");
+
     public static class Media
     {
         public const int MAX_DISPLAY_LENGTH = 50;

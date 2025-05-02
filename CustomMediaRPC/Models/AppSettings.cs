@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace CustomMediaRPC.Models;
 
@@ -28,6 +29,9 @@ public class AppSettings : INotifyPropertyChanged
 
     // Список выбранных кнопок-ссылок
     private List<string> _selectedLinkButtonSites = new List<string>();
+
+    [JsonIgnore] // This property is determined at runtime and should not be saved
+    public bool FirstLaunch { get; set; }
 
     public bool EnableCoverArtFetching
     {
@@ -129,6 +133,8 @@ public class AppSettings : INotifyPropertyChanged
         get => _silentAutoUpdates;
         set => SetField(ref _silentAutoUpdates, value);
     }
+
+    public string Language { get; set; } = "ru-RU"; // Added language setting, default to Russian
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

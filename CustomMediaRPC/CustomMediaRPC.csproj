@@ -8,33 +8,29 @@
     <ApplicationIcon>favicon.ico</ApplicationIcon>
     <Version>1.2.0</Version>
     <Authors>Mejaikin</Authors>
-    <Description>РћС‚РѕР±СЂР°Р¶Р°РµС‚ РјРµРґРёР°-СЃС‚Р°С‚СѓСЃ РёР· Windows РІ Discord Rich Presence</Description>
+    <Description>Отображает медиа-статус из Windows в Discord Rich Presence</Description>
     <Product>MediaToRPC</Product>
-    <Copyright>Copyright В© 2024 Mejaikin</Copyright>
+    <Copyright>Copyright © 2024 Mejaikin</Copyright>
     <VelopackAppId>MediaToRPC</VelopackAppId>
+    <RootNamespace>CustomMediaRPC</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="favicon.ico" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.1" />
-    <!-- <PackageReference Include="FluentWPF" Version="0.10.2" /> -->
-    <!-- <PackageReference Include="MahApps.Metro" Version="2.4.10" /> -->
-    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="9.0.4" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.4" />
-    <PackageReference Include="Microsoft.Windows.CsWinRT" Version="2.2.0" />
+    <PackageReference Include="HtmlAgilityPack" Version="1.11.58" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0-preview.4.24266.19" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="SpotifyAPI.Web" Version="7.2.1" />
     <PackageReference Include="Velopack" Version="0.0.1053" />
-    <PackageReference Include="Velopack.Build" Version="0.0.1053">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
     <PackageReference Include="VkNet" Version="1.78.0" />
     <PackageReference Include="WPF-UI" Version="4.0.2" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="..\appsettings.json">
-      <!-- РџСѓС‚СЊ РѕС‚РЅРѕСЃРёС‚РµР»СЊРЅРѕ РїР°РїРєРё РїСЂРѕРµРєС‚Р° -->
+      <!-- Путь относительно папки проекта -->
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
@@ -54,5 +50,33 @@
     <Reference Include="DiscordRPC">
       <HintPath>Libs\DiscordRPC.dll</HintPath>
     </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Update="Properties\Resources.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Update="Properties\Resources.resx">
+      <Generator>PublicResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <EmbeddedResource Update="Properties\Resources.ru.resx">
+      <Generator>PublicResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.ru.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Libs\discord-rpc.log">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Libs\discord-rpc.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>

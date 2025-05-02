@@ -1,0 +1,314 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <!-- Sample String -->
+  <data name="MainWindow_Title" xml:space="preserve">
+    <value>MediaPresence</value>
+  </data>
+  <data name="SettingsWindow_Title" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+   <data name="Language" xml:space="preserve">
+    <value>Language</value>
+  </data>
+  <data name="RestartRequired" xml:space="preserve">
+    <value>Restart required</value>
+    <comment>Tooltip or message indicating app restart is needed</comment>
+  </data>
+   <data name="RestartRequiredMessage" xml:space="preserve">
+    <value>Please restart the application for the language change to take full effect.</value>
+  </data>
+   <data name="OK" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <!-- Add more strings here -->
+  
+  <!-- MainWindow -->
+  <data name="TrayIcon_ToolTip" xml:space="preserve">
+    <value>MediaPresence</value>
+  </data>
+   <data name="TrayMenu_Show" xml:space="preserve">
+    <value>Show</value>
+  </data>
+   <data name="TrayMenu_Exit" xml:space="preserve">
+    <value>Exit</value>
+  </data>
+   <data name="SelectMediaSource" xml:space="preserve">
+    <value>Select Media Source:</value>
+  </data>
+  <data name="ConnectButton" xml:space="preserve">
+    <value>Connect</value>
+  </data>
+  <data name="DisconnectButton" xml:space="preserve">
+    <value>Disconnect</value>
+  </data>
+  <data name="SettingsButton_ToolTip" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="ThemeCycleButton_ToolTip" xml:space="preserve">
+    <value>Cycle Theme</value>
+  </data>
+  <data name="CopyDebugInfoButton_ToolTip" xml:space="preserve">
+    <value>Copy Debug Info</value>
+  </data>
+  <data name="CopyDebugInfoButton_Content" xml:space="preserve">
+    <value>ID</value> 
+  </data>
+  <data name="EnableCoverArtCheckBox" xml:space="preserve">
+    <value>Load album art</value>
+  </data>
+  <data name="CoverArtSource_Spotify" xml:space="preserve">
+    <value>Spotify (unavailable in Russia)</value>
+  </data>
+    <data name="CoverArtSource_Deezer" xml:space="preserve">
+    <value>Deezer</value>
+  </data>
+  <data name="UseCustomCoverCheckBox" xml:space="preserve">
+    <value>Use custom default cover URL:</value>
+  </data>
+  <data name="LinkButtonsExpander_Header" xml:space="preserve">
+    <value>Select link buttons</value>
+  </data>
+  <data name="LinkButton_Spotify" xml:space="preserve">
+    <value>Spotify</value>
+  </data>
+  <data name="LinkButton_YouTubeMusic" xml:space="preserve">
+    <value>YouTube Music</value>
+  </data>
+  <data name="LinkButton_AppleMusic" xml:space="preserve">
+    <value>Apple Music</value>
+  </data>
+  <data name="LinkButton_YandexMusic" xml:space="preserve">
+    <value>Yandex Music</value>
+  </data>
+  <data name="LinkButton_Deezer" xml:space="preserve">
+    <value>Deezer</value>
+  </data>
+  <data name="LinkButton_VkMusic" xml:space="preserve">
+    <value>VK Music</value>
+  </data>
+    <data name="LinkButton_GitHub" xml:space="preserve">
+    <value>Project Download</value>
+  </data>
+  <data name="StatusTextBlock_Initializing" xml:space="preserve">
+    <value>Initializing...</value>
+  </data>
+  <data name="DevelopersHyperlink" xml:space="preserve">
+    <value>Developers</value>
+  </data>
+  <data name="VersionTextBlock_ToolTip" xml:space="preserve">
+    <value>Show Changelog</value>
+  </data>
+  
+  <!-- Messages & Statuses (used in C# code) -->
+   <data name="Status_NoMediaSession" xml:space="preserve">
+    <value>No active media session found. Play some music!</value>
+  </data>
+  <data name="Status_Connecting" xml:space="preserve">
+    <value>Connecting to Discord...</value>
+  </data>
+  <data name="Status_Connected" xml:space="preserve">
+    <value>Connected to Discord. Rich Presence active.</value>
+  </data>
+    <data name="Status_ConnectedPaused" xml:space="preserve">
+    <value>Connected to Discord. Media paused..</value>
+  </data>
+  <data name="Status_Error" xml:space="preserve">
+    <value>Error: {0}</value>
+  </data>
+   <data name="Status_SpotifyAuthNeeded" xml:space="preserve">
+    <value>Spotify authentication required. Check settings.</value>
+  </data>
+  <data name="Status_SpotifyError" xml:space="preserve">
+    <value>Spotify Error: {0}</value>
+    <comment>{0} is the Spotify error message</comment>
+  </data>
+   <data name="DebugInfoCopied" xml:space="preserve">
+    <value>Debug information copied to clipboard.</value>
+  </data>
+  
+  <!-- AboutWindow -->
+  <data name="AboutWindow_Title" xml:space="preserve">
+    <value>About MediaPresence</value>
+  </data>
+  <data name="AboutWindow_AppName" xml:space="preserve">
+    <value>MediaPresence</value>
+    <comment>The name of the application</comment>
+  </data>
+  <data name="AboutWindow_Version" xml:space="preserve">
+    <value>Version {0}</value>
+    <comment>{0} is the version number like 1.2.3</comment>
+  </data>
+  <data name="AboutWindow_Description" xml:space="preserve">
+    <value>An application to display your currently playing media from various sources as a Discord Rich Presence.</value>
+  </data>
+  <data name="AboutWindow_GitHubRepo" xml:space="preserve">
+    <value>GitHub Repository</value>
+  </data>
+   <data name="AboutWindow_ReportIssue" xml:space="preserve">
+    <value>Report an Issue</value>
+  </data>
+   <data name="AboutWindow_DonateButton" xml:space="preserve">
+    <value>Donate</value>
+  </data>
+   <data name="AboutWindow_DevelopedBy" xml:space="preserve">
+    <value>Developed by</value>
+  </data>
+   <data name="AboutWindow_DeveloperName" xml:space="preserve">
+    <value>Mejaikin &amp; Spellov</value>
+  </data>
+   <data name="AboutWindow_IconsBy" xml:space="preserve">
+    <value>Icons by</value>
+  </data>
+  
+  <!-- ChangelogWindow -->
+   <data name="ChangelogWindow_Title" xml:space="preserve">
+    <value>Changelog</value>
+  </data>
+  <data name="Changelog_StatusLoading" xml:space="preserve">
+    <value>Loading changelog...</value>
+  </data>
+  <data name="Changelog_ErrorNoReleases" xml:space="preserve">
+    <value>No releases found on GitHub.</value>
+  </data>
+  <data name="Changelog_ErrorHttp" xml:space="preserve">
+    <value>Error fetching changelog: {0}
+Details: {1}</value>
+    <comment>{0} = HTTP Status Code, {1} = Details</comment>
+  </data>
+  <data name="Changelog_ErrorNetwork" xml:space="preserve">
+    <value>Network error fetching changelog: {0}</value>
+    <comment>{0} = Exception message</comment>
+  </data>
+    <data name="Changelog_ErrorParsing" xml:space="preserve">
+    <value>Error parsing changelog data: {0}</value>
+     <comment>{0} = Exception message</comment>
+  </data>
+    <data name="Changelog_ErrorUnexpected" xml:space="preserve">
+    <value>An unexpected error occurred: {0}</value>
+     <comment>{0} = Exception message</comment>
+  </data>
+  
+  <!-- FloatingPlayerWindow -->
+  <data name="FloatingPlayer_PlayButton_ToolTip" xml:space="preserve">
+    <value>Play</value>
+  </data>
+   <data name="FloatingPlayer_PauseButton_ToolTip" xml:space="preserve">
+    <value>Pause</value>
+  </data>
+   <data name="FloatingPlayer_PreviousButton_ToolTip" xml:space="preserve">
+    <value>Previous</value>
+  </data>
+   <data name="FloatingPlayer_NextButton_ToolTip" xml:space="preserve">
+    <value>Next</value>
+  </data>
+   <data name="FloatingPlayer_HideButton_ToolTip" xml:space="preserve">
+    <value>Hide Player</value>
+  </data>
+  <!-- Other Status Messages -->
+  <data name="Status_MediaControlsInitialized" xml:space="preserve">
+    <value>Media Controls initialized. Select a source or wait for media...</value>
+  </data>
+  <data name="Status_ConnectedAsUser" xml:space="preserve">
+    <value>Connected as {0}</value>
+    <comment>{0} is the username</comment>
+  </data>
+  <data name="PlaybackStatus_Playing" xml:space="preserve">
+    <value>Playing</value>
+  </data>
+  <data name="PlaybackStatus_Paused" xml:space="preserve">
+    <value>Paused</value>
+  </data>
+  <data name="PlaybackStatus_Stopped" xml:space="preserve">
+    <value>Stopped</value>
+  </data>
+  <data name="PlaybackStatus_Unknown" xml:space="preserve">
+    <value>Unknown</value>
+  </data>
+
+  <!-- Other settings window strings -->
+  <data name="Settings_FloatingPlayerHeader" xml:space="preserve">
+    <value>Floating Player</value>
+  </data>
+  <data name="Settings_EnableFloatingPlayer" xml:space="preserve">
+    <value>Enable</value>
+  </data>
+  <data name="Settings_PlayerAlwaysOnTop" xml:space="preserve">
+    <value>Always On Top</value>
+  </data>
+  <data name="Settings_GeneralHeader" xml:space="preserve">
+    <value>General</value>
+  </data>
+  <data name="Settings_LaunchOnStartup" xml:space="preserve">
+    <value>Launch on Windows startup</value>
+  </data>
+  <data name="Settings_UpdatesHeader" xml:space="preserve">
+    <value>Updates</value>
+  </data>
+  <data name="Settings_AutoCheckUpdates" xml:space="preserve">
+    <value>Check for updates on startup</value>
+  </data>
+  <data name="Settings_SilentUpdates" xml:space="preserve">
+    <value>Update automatically without asking</value>
+  </data>
+  <data name="Settings_CheckUpdatesNow" xml:space="preserve">
+    <value>Check for Updates Now</value>
+  </data>
+</root> 

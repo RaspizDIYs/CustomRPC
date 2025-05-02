@@ -4,6 +4,7 @@ using CustomMediaRPC.Models;
 using System.Diagnostics;
 using System;
 using Windows.Storage.Streams;
+using Windows.Media.Control;
 
 namespace CustomMediaRPC.Services
 {
@@ -50,6 +51,7 @@ namespace CustomMediaRPC.Services
                     _playerWindow.PlayPauseToggleRequested += OnPlayerPlayPauseToggleRequested;
                     _playerWindow.NextRequested += OnPlayerNextRequested;
                     _playerWindow.Closed += PlayerWindow_Closed; // Обрабатываем закрытие
+                    _playerWindow.HideRequested += PlayerWindow_HideRequested; // Подписка на новое событие
                     Debug.WriteLine("FloatingPlayerWindow instance created and events subscribed.");
                 });
             }
@@ -63,6 +65,7 @@ namespace CustomMediaRPC.Services
                  _playerWindow.PreviousRequested -= OnPlayerPreviousRequested;
                  _playerWindow.PlayPauseToggleRequested -= OnPlayerPlayPauseToggleRequested;
                  _playerWindow.NextRequested -= OnPlayerNextRequested;
+                 _playerWindow.HideRequested -= PlayerWindow_HideRequested; // Отписка от нового события
                  _playerWindow.Closed -= PlayerWindow_Closed;
                  _playerWindow = null; // Сбрасываем ссылку
                  Debug.WriteLine("FloatingPlayerWindow closed and events unsubscribed.");
@@ -73,6 +76,14 @@ namespace CustomMediaRPC.Services
         private void OnPlayerPreviousRequested(object? sender, EventArgs e) => PreviousRequested?.Invoke(this, e);
         private void OnPlayerPlayPauseToggleRequested(object? sender, EventArgs e) => PlayPauseToggleRequested?.Invoke(this, e);
         private void OnPlayerNextRequested(object? sender, EventArgs e) => NextRequested?.Invoke(this, e);
+
+        // Обработчик для нового события скрытия
+        private void PlayerWindow_HideRequested(object? sender, EventArgs e)
+        {
+            // HidePlayer(); // Просто вызываем наш метод скрытия - НЕПРАВИЛЬНО для кнопки
+            SetVisibility(false); // Вызываем метод, который меняет настройку и скрывает
+            Debug.WriteLine("HideRequested event received from player window. Calling SetVisibility(false).");
+        }
 
         public void SetVisibility(bool isVisible)
         {
@@ -131,16 +142,34 @@ namespace CustomMediaRPC.Services
             });
         }
 
-        // Обновляем метод, чтобы принимать IRandomAccessStreamReference
+        // Helper method to convert custom status to system status
+        private GlobalSystemMediaTransportControlsSessionPlaybackStatus ConvertStatus(MediaPlaybackStatus customStatus)
+        {
+            return customStatus switch
+            {
+                MediaPlaybackStatus.Playing => GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing,
+                MediaPlaybackStatus.Paused => GlobalSystemMediaTransportControlsSessionPlaybackStatus.Paused,
+                MediaPlaybackStatus.Stopped => GlobalSystemMediaTransportControlsSessionPlaybackStatus.Stopped,
+                MediaPlaybackStatus.Unknown => GlobalSystemMediaTransportControlsSessionPlaybackStatus.Stopped, 
+                _ => GlobalSystemMediaTransportControlsSessionPlaybackStatus.Stopped
+            };
+        }
+
+        // Update the method signature to accept IRandomAccessStreamReference
         public void UpdateContent(string title, string artist, MediaPlaybackStatus status, IRandomAccessStreamReference? thumbnail = null, TimeSpan? currentPosition = null, TimeSpan? totalDuration = null)
         {
             Application.Current.Dispatcher.Invoke(() =>
             {
                  if (_playerWindow != null && _playerWindow.IsLoaded && _playerWindow.IsVisible)
                  {
-                    // Передаем миниатюру вместо URL
-                    _playerWindow.UpdateContent(title, artist, status, thumbnail, currentPosition, totalDuration);
-                    Debug.WriteLine($"FloatingPlayerWindow content updated: {title} - {artist} ({status}), Thumbnail: {thumbnail != null}, Time: {currentPosition}/{totalDuration}");
+                    // Convert status and extract total seconds, providing defaults
+                    var systemStatus = ConvertStatus(status);
+                    double currentSec = currentPosition?.TotalSeconds ?? 0;
+                    double totalSec = totalDuration?.TotalSeconds ?? 0;
+
+                    // Pass thumbnail stream reference directly, use converted status and seconds
+                    _playerWindow.UpdateContent(title, artist, systemStatus, thumbnail, currentSec, totalSec);
+                    Debug.WriteLine($"FloatingPlayerWindow content updated via service: {title} - {artist} ({systemStatus}), Thumbnail: {thumbnail != null}, Time: {currentSec}/{totalSec}");
                  }
                  else
                  {
