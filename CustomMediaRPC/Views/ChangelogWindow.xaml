@@ -6,7 +6,7 @@
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:local="clr-namespace:CustomMediaRPC.Views"
         xmlns:properties="clr-namespace:CustomMediaRPC.Properties"
-        xmlns:utils="clr-namespace:CustomMediaRPC"
+        xmlns:utils="clr-namespace:CustomMediaRPC.Utils"
         mc:Ignorable="d"
         Title="{x:Static properties:Resources.ChangelogWindow_Title}"
         Height="300" Width="350" MinHeight="300" MinWidth="400"
