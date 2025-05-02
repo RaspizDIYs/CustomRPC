@@ -6,11 +6,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>favicon.ico</ApplicationIcon>
-    <Version>1.3.1</Version>
+    <Version>1.3.2</Version>
     <Authors>Mejaikin</Authors>
-    <Description>Р С›РЎвЂљР С•Р В±РЎР‚Р В°Р В¶Р В°Р ВµРЎвЂљ Р СР ВµР Т‘Р С‘Р В°-РЎРѓРЎвЂљР В°РЎвЂљРЎС“РЎРѓ Р С‘Р В· Windows Р Р† Discord Rich Presence</Description>
+    <Description>Р В РЎвЂєР РЋРІР‚С™Р В РЎвЂўР В Р’В±Р РЋР вЂљР В Р’В°Р В Р’В¶Р В Р’В°Р В Р’ВµР РЋРІР‚С™ Р В РЎВР В Р’ВµР В РўвЂР В РЎвЂР В Р’В°-Р РЋР С“Р РЋРІР‚С™Р В Р’В°Р РЋРІР‚С™Р РЋРЎвЂњР РЋР С“ Р В РЎвЂР В Р’В· Windows Р В Р вЂ  Discord Rich Presence</Description>
     <Product>MediaToRPC</Product>
-    <Copyright>Copyright Р’В© 2024 Mejaikin</Copyright>
+    <Copyright>Copyright Р вЂ™Р’В© 2024 Mejaikin</Copyright>
     <VelopackAppId>MediaToRPC</VelopackAppId>
     <RootNamespace>CustomMediaRPC</RootNamespace>
   </PropertyGroup>
@@ -31,7 +31,7 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="..\appsettings.json">
-      <!-- Р СџРЎС“РЎвЂљРЎРЉ Р С•РЎвЂљР Р…Р С•РЎРѓР С‘РЎвЂљР ВµР В»РЎРЉР Р…Р С• Р С—Р В°Р С—Р С”Р С‘ Р С—РЎР‚Р С•Р ВµР С”РЎвЂљР В° -->
+      <!-- Р В РЎСџР РЋРЎвЂњР РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂўР РЋРІР‚С™Р В Р вЂ¦Р В РЎвЂўР РЋР С“Р В РЎвЂР РЋРІР‚С™Р В Р’ВµР В Р’В»Р РЋР Р‰Р В Р вЂ¦Р В РЎвЂў Р В РЎвЂ”Р В Р’В°Р В РЎвЂ”Р В РЎвЂќР В РЎвЂ Р В РЎвЂ”Р РЋР вЂљР В РЎвЂўР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р’В° -->
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
