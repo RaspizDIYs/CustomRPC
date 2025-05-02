@@ -68,7 +68,7 @@ public partial class AboutWindow : FluentWindow
 
     private void DonateButtonAbout_Click(object sender, RoutedEventArgs e)
     {
-        string donationUrl = "https://www.buymeacoffee.com/raspiz";
+        string donationUrl = "https://www.donationalerts.com/r/mejaikin";
         try
         {
             Process.Start(new ProcessStartInfo(donationUrl) { UseShellExecute = true });
