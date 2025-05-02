@@ -1049,25 +1049,16 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     // Инициализация словаря чекбоксов
     private void InitializeLinkCheckBoxes()
     {
-        // Находим все CheckBox внутри UniformGrid внутри LinkButtonsExpander
-        // Это более надежно, чем обращаться по именам напрямую
-        if (LinkButtonsExpander.Content is ScrollViewer sv && sv.Content is System.Windows.Controls.Primitives.UniformGrid ug)
-        {
-            foreach (var child in ug.Children)
+        _linkCheckBoxes = new Dictionary<string, CheckBox>
             {
-                if (child is CheckBox cb && cb.Content is string content && !string.IsNullOrEmpty(content))
-                {
-                    _linkCheckBoxes[content] = cb;
-                    DebugLogger.Log($"[InitializeLinkCheckBoxes] Added checkbox: {content}");
-                }
-            }
-        }
-        else
+                { LocalizationManager.GetString("LinkButton_GitHub") ?? "GitHub", GitHubLinkCheckBox },
+                { LocalizationManager.GetString("LinkButton_Genius") ?? "Genius", GeniusLinkCheckBox }
+            };
+
+        // Debug: Print the keys being used for initialization
+        foreach (var key in _linkCheckBoxes.Keys)
         {
-            DebugLogger.Log("[InitializeLinkCheckBoxes] Failed to find UniformGrid containing checkboxes.");
-            // Можно добавить запасной вариант с поиском по именам, если нужно
-            // _linkCheckBoxes.Add("Spotify", SpotifyLinkCheckBox);
-            // ... и т.д.
+            DebugLogger.Log($"[InitializeLinkCheckBoxes] Added checkbox: {key}");
         }
     }
 

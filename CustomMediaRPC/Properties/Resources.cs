@@ -762,5 +762,14 @@ namespace CustomMediaRPC.Properties {
                 return ResourceManager.GetString("VersionTextBlock_ToolTip", resourceCulture);
             }
         }
+        
+        /// <summary>
+        ///   Ищет локализованную строку, похожую на Genius.
+        /// </summary>
+        public static string LinkButton_Genius {
+            get {
+                return ResourceManager.GetString("LinkButton_Genius", resourceCulture);
+            }
+        }
     }
 }

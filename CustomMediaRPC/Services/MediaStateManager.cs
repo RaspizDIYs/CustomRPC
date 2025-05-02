@@ -506,10 +506,20 @@ public class MediaStateManager
 
             if (!string.IsNullOrEmpty(trackUrl))
             {
-                // Определяем текст кнопки
-                string buttonLabel = siteName.Equals("Project Download", StringComparison.OrdinalIgnoreCase)
-                                        ? "Get It"
-                                        : $"Listen on {siteName}";
+                // Определяем текст кнопки - ДОБАВЛЯЕМ ПРОВЕРКУ НА GENIUS
+                string buttonLabel;
+                if (siteName.Equals("Genius", StringComparison.OrdinalIgnoreCase))
+                {
+                    buttonLabel = "Text on Genius";
+                }
+                else if (siteName.Equals("Project Download", StringComparison.OrdinalIgnoreCase))
+                {
+                    buttonLabel = "Get It";
+                }
+                else
+                {
+                    buttonLabel = $"Listen on {siteName}";
+                }
                 
                 buttons.Add(new Button
                 {
@@ -560,6 +570,8 @@ public class MediaStateManager
                 return $"https://vk.com/audio?q={query}";
             case "project download": // Добавляем кейс для скачивания
                 return "https://github.com/RaspizDIYs/CustomRPC"; 
+            case "genius": // Новый кейс для Genius
+                return $"https://genius.com/search?q={query}";
             default:
                 return null;
         }

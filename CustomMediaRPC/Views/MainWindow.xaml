@@ -143,6 +143,7 @@
                             <CheckBox x:Name="DeezerLinkCheckBox" Content="{x:Static properties:Resources.LinkButton_Deezer}" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
                             <CheckBox x:Name="VkMusicLinkCheckBox" Content="{x:Static properties:Resources.LinkButton_VkMusic}" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
                             <CheckBox x:Name="GitHubLinkCheckBox" Content="{x:Static properties:Resources.LinkButton_GitHub}" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
+                            <CheckBox x:Name="GeniusLinkCheckBox" Content="{x:Static properties:Resources.LinkButton_Genius}" Margin="0" Checked="LinkCheckBox_Changed" Unchecked="LinkCheckBox_Changed"/>
                         </UniformGrid>
                     </ScrollViewer>
                 </Expander>
