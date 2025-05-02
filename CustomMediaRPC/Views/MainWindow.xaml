@@ -75,6 +75,15 @@
                                Background="Transparent"
                                ToolTip="Сменить тему"
                                Margin="0,0,0,0"/>
+                    <!-- Новая кнопка копирования -->
+                    <ui:Button x:Name="CopyDebugInfoButton"
+                               Content="ID"
+                               Click="CopyDebugInfoButton_Click" 
+                               Appearance="Transparent"
+                               BorderThickness="0"
+                               Background="Transparent"
+                               ToolTip="Скопировать ID"
+                               Margin="5,0,0,0"/>
                 </StackPanel>
 
                 <!-- Настройки обложек: Убираем GroupBox, оставляем StackPanel -->

@@ -1217,4 +1217,31 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         }
     }
     // -----------------------------------------------
+
+    // Новый обработчик для кнопки копирования
+    private void CopyDebugInfoButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            string clientId = Encoding.UTF8.GetString(Convert.FromBase64String(EncodedClientId));
+            Clipboard.SetText(clientId);
+            // Можно добавить уведомление об успешном копировании, если нужно
+            // Например, изменить ToolTip кнопки на время
+            CopyDebugInfoButton.ToolTip = "Скопировано!";
+            Task.Delay(1500).ContinueWith(_ => Dispatcher.Invoke(() => 
+            {
+                CopyDebugInfoButton.ToolTip = "Скопировать отладочную информацию";
+            }));
+        }
+        catch (Exception ex)
+        {
+            DebugLogger.Log("Error copying debug info to clipboard", ex);
+            // Уведомление об ошибке
+            CopyDebugInfoButton.ToolTip = "Ошибка копирования";
+             Task.Delay(1500).ContinueWith(_ => Dispatcher.Invoke(() => 
+            {
+                CopyDebugInfoButton.ToolTip = "Скопировать отладочную информацию";
+            }));
+        }
+    }
 }
