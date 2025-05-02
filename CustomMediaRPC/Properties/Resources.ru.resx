@@ -124,7 +124,7 @@
     <value>Использовать свой URL обложки по умолчанию:</value>
   </data>
   <data name="LinkButtonsExpander_Header" xml:space="preserve">
-    <value>Кнопки-ссылки (Макс. 2)</value>
+    <value>Ссылки на сайты</value>
   </data>
   <data name="LinkButton_Spotify" xml:space="preserve">
     <value>Spotify</value>
@@ -136,13 +136,13 @@
     <value>Apple Music</value>
   </data>
   <data name="LinkButton_YandexMusic" xml:space="preserve">
-    <value>Яндекс Музыка</value>
+    <value>Yandex Music</value>
   </data>
   <data name="LinkButton_Deezer" xml:space="preserve">
     <value>Deezer</value>
   </data>
   <data name="LinkButton_VkMusic" xml:space="preserve">
-    <value>VK Музыка</value>
+    <value>VK Music</value>
   </data>
   <data name="LinkButton_GitHub" xml:space="preserve">
     <value>GitHub</value>

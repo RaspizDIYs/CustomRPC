@@ -34,6 +34,20 @@ using CustomMediaRPC.Properties; // Add this for direct access to resources
 
 namespace CustomMediaRPC.Views;
 
+// Add constants for internal site names
+public static class LinkButtonKeys
+{
+    public const string GitHub = "GitHub";
+    public const string Genius = "Genius";
+    public const string Spotify = "Spotify";
+    public const string YouTubeMusic = "YouTubeMusic";
+    public const string AppleMusic = "AppleMusic";
+    public const string Deezer = "Deezer";
+    public const string YandexMusic = "YandexMusic";
+    public const string VkMusic = "VkMusic";
+    // Add other keys if needed
+}
+
 // Конвертер для видимости TextBox
 public class BooleanToVisibilityConverter : IValueConverter
 {
@@ -72,10 +86,10 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
     private ApplicationTheme _currentAppTheme;
 
-    // Словарь для связи имени сайта и чекбокса
+    // Словарь для связи ВНУТРЕННЕГО имени сайта и чекбокса
     private Dictionary<string, CheckBox> _linkCheckBoxes = new Dictionary<string, CheckBox>();
 
-    // Список выбранных сайтов для кнопок (локальная копия)
+    // Список ВНУТРЕННИХ имен выбранных сайтов для кнопок (локальная копия)
     private List<string> _selectedLinkSites = new List<string>();
     private const int MaxLinkSites = 2;
 
@@ -1046,113 +1060,126 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     */
     // ---------------------------------------------------
 
-    // Инициализация словаря чекбоксов
+    // Инициализация словаря чекбоксов с использованием ВНУТРЕННИХ ключей
     private void InitializeLinkCheckBoxes()
     {
         _linkCheckBoxes = new Dictionary<string, CheckBox>
-            {
-                { LocalizationManager.GetString("LinkButton_GitHub") ?? "GitHub", GitHubLinkCheckBox },
-                { LocalizationManager.GetString("LinkButton_Genius") ?? "Genius", GeniusLinkCheckBox }
-            };
-
-        // Debug: Print the keys being used for initialization
-        foreach (var key in _linkCheckBoxes.Keys)
         {
-            DebugLogger.Log($"[InitializeLinkCheckBoxes] Added checkbox: {key}");
+            // Используем константы LinkButtonKeys как ключи
+            { LinkButtonKeys.GitHub, GitHubLinkCheckBox },
+            { LinkButtonKeys.Genius, GeniusLinkCheckBox },
+            { LinkButtonKeys.Spotify, SpotifyLinkCheckBox }, // Предполагаем, что SpotifyLinkCheckBox существует
+            { LinkButtonKeys.YouTubeMusic, YouTubeMusicLinkCheckBox }, // Предполагаем, что YouTubeMusicLinkCheckBox существует
+            { LinkButtonKeys.AppleMusic, AppleMusicLinkCheckBox }, // Предполагаем, что AppleMusicLinkCheckBox существует
+            { LinkButtonKeys.Deezer, DeezerLinkCheckBox }, // Предполагаем, что DeezerLinkCheckBox существует
+            { LinkButtonKeys.YandexMusic, YandexMusicLinkCheckBox }, // Предполагаем, что YandexMusicLinkCheckBox существует
+            { LinkButtonKeys.VkMusic, VkMusicLinkCheckBox }
+            // Добавить другие, если они есть
+        };
+
+        // Устанавливаем Content для каждого чекбокса из локализации
+        // и сохраняем внутренний ключ в Tag для обратного поиска
+        foreach (var kvp in _linkCheckBoxes)
+        {
+            string internalKey = kvp.Key;
+            CheckBox checkBox = kvp.Value;
+            string resourceKey = $"LinkButton_{internalKey}"; // Генерируем ключ ресурса (LinkButton_VkMusic)
+            checkBox.Content = LocalizationManager.GetString(resourceKey) ?? internalKey; // Устанавливаем локализованный текст
+            checkBox.Tag = internalKey; // Сохраняем внутренний ключ в Tag
+            DebugLogger.Log($"[InitializeLinkCheckBoxes] Initialized checkbox: Key='{internalKey}', Content='{checkBox.Content}', Tag='{checkBox.Tag}'");
         }
     }
 
-    // Загрузка состояния чекбоксов из настроек
+    // Загрузка состояния чекбоксов из настроек (используем ВНУТРЕННИЕ ключи)
     private void LoadLinkCheckBoxStates()
     {
         _selectedLinkSites.Clear(); // Очищаем локальный список
+        // Теперь savedSites будет содержать ВНУТРЕННИЕ ключи (GitHub, VkMusic и т.д.)
         var savedSites = _appSettings.SelectedLinkButtonSites ?? new List<string>();
-        DebugLogger.Log($"[LoadLinkCheckBoxStates] Loading saved sites: {string.Join(", ", savedSites)}");
+        DebugLogger.Log($"[LoadLinkCheckBoxStates] Loading saved internal site keys: [{string.Join(", ", savedSites)}]");
 
         foreach (var cbPair in _linkCheckBoxes)
         {
-            bool shouldBeChecked = savedSites.Contains(cbPair.Key);
+            // Сравниваем ВНУТРЕННИЙ ключ словаря (cbPair.Key) с ВНУТРЕННИМИ ключами из настроек
+            string internalKey = cbPair.Key;
+            bool shouldBeChecked = savedSites.Contains(internalKey);
             cbPair.Value.IsChecked = shouldBeChecked;
             if (shouldBeChecked)
             {
-                 // Добавляем в локальный список только те, что реально отмечены
-                if (!_selectedLinkSites.Contains(cbPair.Key))
+                // Добавляем ВНУТРЕННИЙ ключ в локальный список
+                if (!_selectedLinkSites.Contains(internalKey))
                 {
-                     _selectedLinkSites.Add(cbPair.Key); 
+                    _selectedLinkSites.Add(internalKey); 
                 }
             }
-             DebugLogger.Log($"[LoadLinkCheckBoxStates] Checkbox '{cbPair.Key}' set to IsChecked={shouldBeChecked}");
+            DebugLogger.Log($"[LoadLinkCheckBoxStates] Checkbox for internal key '{internalKey}' (Content: '{cbPair.Value.Content}') set to IsChecked={shouldBeChecked}");
         }
         
         // Обновляем состояние доступности после загрузки
         UpdateLinkCheckBoxStates();
-        DebugLogger.Log($"[LoadLinkCheckBoxStates] Current local selection: {string.Join(", ", _selectedLinkSites)}");
+        DebugLogger.Log($"[LoadLinkCheckBoxStates] Current local selection (internal keys): [{string.Join(", ", _selectedLinkSites)}]");
     }
 
-    // Обработчик для чекбоксов ссылок
+    // Обработчик для чекбоксов ссылок (используем Tag для получения ВНУТРЕННЕГО ключа)
     private void LinkCheckBox_Changed(object sender, RoutedEventArgs e)
     {
         DebugLogger.Log("[LinkCheckBox_Changed] Handler started.");
-        if (sender is not CheckBox clickedCheckBox || clickedCheckBox.Content == null) 
+        if (sender is not CheckBox clickedCheckBox)
         {
-            DebugLogger.Log("[LinkCheckBox_Changed] Handler exited: Invalid sender or content.");
+            DebugLogger.Log("[LinkCheckBox_Changed] Handler exited: Invalid sender.");
             return;
         }
 
-        string siteName = clickedCheckBox.Content.ToString() ?? string.Empty;
-        if (string.IsNullOrEmpty(siteName)) 
+        // Получаем ВНУТРЕННИЙ ключ из Tag
+        string? siteInternalKey = clickedCheckBox.Tag as string;
+        if (string.IsNullOrEmpty(siteInternalKey)) 
         {
-             DebugLogger.Log("[LinkCheckBox_Changed] Handler exited: Site name is empty.");
+            DebugLogger.Log($"[LinkCheckBox_Changed] Handler exited: Could not get internal key from CheckBox Tag. Content was: '{clickedCheckBox.Content}'.");
             return;
         }
         
-        DebugLogger.Log($"[LinkCheckBox_Changed] Checkbox '{siteName}' changed. IsChecked: {clickedCheckBox.IsChecked}");
+        DebugLogger.Log($"[LinkCheckBox_Changed] Checkbox for internal key '{siteInternalKey}' (Content: '{clickedCheckBox.Content}') changed. IsChecked: {clickedCheckBox.IsChecked}");
 
         if (clickedCheckBox.IsChecked == true)
         {
             if (_selectedLinkSites.Count < MaxLinkSites)
             {
-                if (!_selectedLinkSites.Contains(siteName))
+                // Добавляем ВНУТРЕННИЙ ключ
+                if (!_selectedLinkSites.Contains(siteInternalKey))
                 {
-                    _selectedLinkSites.Add(siteName);
+                    _selectedLinkSites.Add(siteInternalKey);
                 }
             }
             else // Уже выбрано максимальное количество
             {
-                // Отменяем выбор этого чекбокса
                 clickedCheckBox.IsChecked = false; 
-                // Можно показать уведомление пользователю
                 System.Windows.MessageBox.Show($"You can select up to {MaxLinkSites} sites.", "Selection Limit Reached", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
-                return; // Выходим, чтобы не обновлять состояние остальных
+                return; 
             }
         }
         else // Checkbox был снят
         {
-            _selectedLinkSites.Remove(siteName);
+            // Удаляем ВНУТРЕННИЙ ключ
+            _selectedLinkSites.Remove(siteInternalKey);
         }
         
-        // --- Сохраняем измененный список в настройки --- 
+        // --- Сохраняем измененный список ВНУТРЕННИХ ключей в настройки --- 
         _appSettings.SelectedLinkButtonSites = new List<string>(_selectedLinkSites); 
-        DebugLogger.Log($"[LinkCheckBox_Changed] Saved sites to AppSettings: {string.Join(", ", _appSettings.SelectedLinkButtonSites)}");
-        // -------------------------------------------------
+        DebugLogger.Log($"[LinkCheckBox_Changed] Saved internal site keys to AppSettings: [{string.Join(", ", _appSettings.SelectedLinkButtonSites)}]");
+        // ------------------------------------------------------------------
 
-        // Обновляем состояние Enabled для всех чекбоксов
         UpdateLinkCheckBoxStates();
         
-        // Если RPC подключен, триггерим немедленное обновление presence 
-        // чтобы кнопки обновились сразу после изменения чекбокса
         if (_isRpcConnected) 
         {
              DebugLogger.Log("[LinkCheckBox_Changed] RPC is connected, requesting presence update.");
-             // Передаем актуальный список сайтов перед обновлением
-             if (MediaStateManager.Instance.SelectedLinkSites != null) 
+             // Передаем актуальный список ВНУТРЕННИХ ключей
+             if (MediaStateManager.Instance != null) // Проверка на null для безопасности
              {
-                MediaStateManager.Instance.SelectedLinkSites = new List<string>(_selectedLinkSites);
-                 DebugLogger.Log($"[LinkCheckBox_Changed] Updated MediaStateManager.SelectedLinkSites: {string.Join(", ", _selectedLinkSites)}");
+                 MediaStateManager.Instance.SelectedLinkSites = new List<string>(_selectedLinkSites);
+                 DebugLogger.Log($"[LinkCheckBox_Changed] Updated MediaStateManager.SelectedLinkSites with internal keys: [{string.Join(", ", _selectedLinkSites)}]");
              }
-             // Используем прямой вызов, а не отложенный, для мгновенного эффекта
-             // await UpdatePresenceFromSession(); // Можно использовать прямой вызов, если нет опасений по частоте
-             RequestPresenceUpdateDebounced(); // Или используем дебаунс, если обновлений может быть много подряд
+             RequestPresenceUpdateDebounced(); 
              DebugLogger.Log("[LinkCheckBox_Changed] RequestPresenceUpdateDebounced was called.");
         }
         else

@@ -124,7 +124,7 @@
     <value>Use custom default cover URL:</value>
   </data>
   <data name="LinkButtonsExpander_Header" xml:space="preserve">
-    <value>Link Buttons (Max 2)</value>
+    <value>Link Buttons</value>
   </data>
   <data name="LinkButton_Spotify" xml:space="preserve">
     <value>Spotify</value>

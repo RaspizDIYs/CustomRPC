@@ -8,6 +8,8 @@ using CustomMediaRPC.Utils;
 using System.Threading;
 using System.Collections.Generic;
 using Windows.Storage.Streams;
+using System.Text;
+using CustomMediaRPC.Views;
 
 namespace CustomMediaRPC.Services;
 
@@ -490,91 +492,154 @@ public class MediaStateManager
     // Новый метод для создания кнопок ссылок
     private Button[]? BuildLinkButtons(Stopwatch? stopwatch = null)
     {
+        stopwatch ??= Stopwatch.StartNew(); 
+        DebugLogger.Log($"[BUTTONS {stopwatch.ElapsedMilliseconds}ms] Entering BuildLinkButtons.");
+
+        // SelectedLinkSites теперь содержит ВНУТРЕННИЕ ключи
         if (SelectedLinkSites == null || SelectedLinkSites.Count == 0) 
         {
-            DebugLogger.Log($"[BUTTONS {stopwatch?.ElapsedMilliseconds}ms] No sites selected, returning null buttons.");
+            DebugLogger.Log($"[BUTTONS {stopwatch.ElapsedMilliseconds}ms] No sites selected (SelectedLinkSites is null or empty), returning null buttons.");
             return null;
         }
 
-        List<Button> buttons = new List<Button>();
-        DebugLogger.Log($"[BUTTONS {stopwatch?.ElapsedMilliseconds}ms] Building buttons for: {string.Join(", ", SelectedLinkSites)}");
+        DebugLogger.Log($"[BUTTONS {stopwatch.ElapsedMilliseconds}ms] CurrentState before button loop: Artist='{_currentState?.Artist ?? "null"}', Title='{_currentState?.Title ?? "null"}'");
 
-        foreach (var siteName in SelectedLinkSites)
+        List<Button> buttons = new List<Button>();
+        DebugLogger.Log($"[BUTTONS {stopwatch.ElapsedMilliseconds}ms] Building buttons for selected internal site keys: [{string.Join(", ", SelectedLinkSites)}]");
+
+        // siteInternalKey будет содержать "GitHub", "VkMusic" и т.д.
+        foreach (var siteInternalKey in SelectedLinkSites)
         {
-            // TODO: Реализовать получение реального URL трека для каждого сервиса
-            string? trackUrl = GetTrackUrlForService(siteName, _currentState.Artist, _currentState.Title);
+            DebugLogger.Log($"[BUTTONS {stopwatch.ElapsedMilliseconds}ms] Processing internal key: '{siteInternalKey}'.");
+
+            // Передаем ВНУТРЕННИЙ ключ в GetTrackUrlForService
+            string? trackUrl = GetTrackUrlForService(siteInternalKey, _currentState?.Artist, _currentState?.Title, stopwatch);
 
             if (!string.IsNullOrEmpty(trackUrl))
             {
-                // Определяем текст кнопки - ДОБАВЛЯЕМ ПРОВЕРКУ НА GENIUS
                 string buttonLabel;
-                if (siteName.Equals("Genius", StringComparison.OrdinalIgnoreCase))
+                string localizedSiteName = LocalizationManager.GetString($"LinkButton_{siteInternalKey}") ?? siteInternalKey;
+
+                // Определяем текст кнопки на основе ВНУТРЕННЕГО ключа
+                if (siteInternalKey.Equals(LinkButtonKeys.Genius, StringComparison.OrdinalIgnoreCase))
                 {
-                    buttonLabel = "Text on Genius";
+                    buttonLabel = "Text on Genius"; // Или взять из ресурсов
                 }
-                else if (siteName.Equals("Project Download", StringComparison.OrdinalIgnoreCase))
+                else if (siteInternalKey.Equals(LinkButtonKeys.GitHub, StringComparison.OrdinalIgnoreCase))
                 {
-                    buttonLabel = "Get It";
+                    // Используем специфичный текст для GitHub
+                    buttonLabel = "Open on Github"; // Или создать ключ ресурса типа OpenOnButtonFormat?
                 }
+                // Сюда можно добавить другие особые случаи по ВНУТРЕННЕМУ ключу
                 else
                 {
-                    buttonLabel = $"Listen on {siteName}";
+                    buttonLabel = $"Listen on {localizedSiteName}"; 
+                    DebugLogger.Log($"[BUTTONS {stopwatch.ElapsedMilliseconds}ms] Using simple label format: '{buttonLabel}' (Localized name: '{localizedSiteName}', InternalKey: '{siteInternalKey}')");
                 }
                 
+                if (Encoding.UTF8.GetByteCount(buttonLabel) > 32)
+                {
+                    DebugLogger.Log($"[BUTTONS {stopwatch.ElapsedMilliseconds}ms] Button label '{buttonLabel}' for internal key '{siteInternalKey}' is too long, trimming...");
+                    int safeLength = buttonLabel.Length;
+                    while (Encoding.UTF8.GetByteCount(buttonLabel.Substring(0, safeLength)) > 32 && safeLength > 0) { safeLength--; }
+                    buttonLabel = buttonLabel.Substring(0, safeLength);
+                    DebugLogger.Log($"[BUTTONS {stopwatch.ElapsedMilliseconds}ms] Trimmed label: '{buttonLabel}'");
+                }
+
                 buttons.Add(new Button
                 {
-                    Label = buttonLabel, // Используем определенный текст
+                    Label = buttonLabel, 
                     Url = trackUrl
                 });
-                DebugLogger.Log($"[BUTTONS {stopwatch?.ElapsedMilliseconds}ms] Added button '{buttonLabel}' for {siteName} with URL: {trackUrl}");
+                DebugLogger.Log($"[BUTTONS {stopwatch.ElapsedMilliseconds}ms] Successfully added button '{buttonLabel}' for internal key '{siteInternalKey}' with URL: {trackUrl}");
             }
             else
             {
-                 DebugLogger.Log($"[BUTTONS {stopwatch?.ElapsedMilliseconds}ms] Could not get URL for {siteName}, skipping button.");
+                 DebugLogger.Log($"[BUTTONS {stopwatch.ElapsedMilliseconds}ms] GetTrackUrlForService returned null or empty for internal key '{siteInternalKey}', skipping button.");
             }
             
-            // Discord поддерживает максимум 2 кнопки
-            if (buttons.Count >= 2) break; 
+            if (buttons.Count >= 2)
+            {
+                 DebugLogger.Log($"[BUTTONS {stopwatch.ElapsedMilliseconds}ms] Reached button limit (2). Stopping loop.");
+                 break; 
+            }
         }
-
+        
+        DebugLogger.Log($"[BUTTONS {stopwatch.ElapsedMilliseconds}ms] Finished building buttons. Count: {buttons.Count}");
         return buttons.Count > 0 ? buttons.ToArray() : null;
     }
     
-    // Заглушка - Заменить реальной логикой поиска URL!
-    private string? GetTrackUrlForService(string serviceName, string? artist, string? title)
+    // Теперь serviceName - это ВНУТРЕННИЙ ключ (например, "VkMusic")
+    private string? GetTrackUrlForService(string serviceName, string? artist, string? title, Stopwatch? stopwatch = null)
     {
-        // Return null if artist or title is missing
-        if (string.IsNullOrWhiteSpace(artist) || string.IsNullOrWhiteSpace(title))
+        stopwatch ??= Stopwatch.StartNew();
+        DebugLogger.Log($"[URL {stopwatch.ElapsedMilliseconds}ms] Entering GetTrackUrlForService for internal key '{serviceName}'. Artist: '{artist}', Title: '{title}'");
+
+        if (string.IsNullOrWhiteSpace(artist) || string.IsNullOrWhiteSpace(title) || artist == Constants.Media.UNKNOWN_ARTIST || title == Constants.Media.UNKNOWN_TITLE)
         {
-            DebugLogger.Log($"[GetTrackUrlForService] Cannot get URL for {serviceName}: Artist or Title is missing.");
+            DebugLogger.Log($"[URL {stopwatch.ElapsedMilliseconds}ms] Cannot get URL for '{serviceName}': Artist ('{artist}') or Title ('{title}') is missing or unknown.");
             return null;
         } 
         
-        // Very simplified example - need to use API or search!
-        // Now artist and title are guaranteed not to be null or whitespace here
-        // Using null-forgiving operator (!) to satisfy compiler warning, though checks should suffice
-        string query = Uri.EscapeDataString($"{artist!} {title!}"); 
-        switch (serviceName.ToLowerInvariant())
-        {
-            case "spotify":
-                return $"https://open.spotify.com/search/{query}";
-            case "youtube music":
-                return $"https://music.youtube.com/search?q={query}";
-            case "apple music":
-                return $"https://music.apple.com/us/search?term={query}"; // Пример, может отличаться для региона
-            case "yandex music":
-                return $"https://music.yandex.ru/search?text={query}";
-            case "deezer":
-                return $"https://www.deezer.com/search/{query}"; // Deezer использует /search/term
-            case "vk music":
-                return $"https://vk.com/audio?q={query}";
-            case "project download": // Добавляем кейс для скачивания
-                return "https://github.com/RaspizDIYs/CustomRPC"; 
-            case "genius": // Новый кейс для Genius
-                return $"https://genius.com/search?q={query}";
-            default:
-                return null;
+        string query;
+        try {
+             query = Uri.EscapeDataString($"{artist!} {title!}"); 
+             DebugLogger.Log($"[URL {stopwatch.ElapsedMilliseconds}ms] Generated query for '{serviceName}': '{query}'");
+        } catch (UriFormatException ex) {
+             DebugLogger.Log($"[URL {stopwatch.ElapsedMilliseconds}ms] Error escaping query for '{serviceName}' ('{artist} {title}')", ex);
+             return null;
         }
+
+        string? url = null;
+        // Убираем генерацию serviceKey, сравниваем serviceName напрямую с константами LinkButtonKeys
+
+        // TODO: Добавить реальные API вызовы или более умный поиск вместо прямого формирования URL
+
+        if (serviceName.Equals(LinkButtonKeys.Spotify, StringComparison.OrdinalIgnoreCase))
+        {
+            url = $"https://open.spotify.com/search/{query}";
+        }
+        else if (serviceName.Equals(LinkButtonKeys.YouTubeMusic, StringComparison.OrdinalIgnoreCase))
+        {
+            url = $"https://music.youtube.com/search?q={query}";
+        }
+        else if (serviceName.Equals(LinkButtonKeys.AppleMusic, StringComparison.OrdinalIgnoreCase))
+        {
+            url = $"https://music.apple.com/us/search?term={query}";
+        }
+        else if (serviceName.Equals(LinkButtonKeys.YandexMusic, StringComparison.OrdinalIgnoreCase))
+        {
+            url = $"https://music.yandex.ru/search?text={query}";
+        }
+        else if (serviceName.Equals(LinkButtonKeys.Deezer, StringComparison.OrdinalIgnoreCase))
+        {
+            url = $"https://www.deezer.com/search/{query}";
+        }
+        else if (serviceName.Equals(LinkButtonKeys.VkMusic, StringComparison.OrdinalIgnoreCase))
+        {
+            url = $"https://vk.com/audio?q={query}";
+        }
+        else if (serviceName.Equals(LinkButtonKeys.Genius, StringComparison.OrdinalIgnoreCase))
+        {
+            url = $"https://genius.com/search?q={query}";
+        }
+        else if (serviceName.Equals(LinkButtonKeys.GitHub, StringComparison.OrdinalIgnoreCase))
+        {
+            // GitHub/Project Download не зависит от трека, используем константный URL
+            url = "https://github.com/RaspizDIYs/CustomRPC"; // Или взять из настроек/констант
+        }
+        // Другие сервисы можно добавить по аналогии
+        
+        if (url != null)
+        {
+            DebugLogger.Log($"[URL {stopwatch.ElapsedMilliseconds}ms] Successfully generated URL for internal key '{serviceName}': {url}");
+        }
+        else
+        {
+            DebugLogger.Log($"[URL {stopwatch.ElapsedMilliseconds}ms] No URL generation logic found for internal key '{serviceName}'. Returning null.");
+        }
+
+        return url;
     }
 
     // Новый вспомогательный метод для сравнения массивов кнопок
