@@ -22,7 +22,6 @@ namespace CustomMediaRPC;
 public partial class App : Application
 {
     public static UpdateManager? UpdateManager { get; private set; }
-    public static SettingsService SettingsService { get; private set; } = new();
     private static IHost? AppHost { get; set; }
     private Mutex? _mutex;
     private const string MutexName = "Global\\CustomMediaRPC";
@@ -38,7 +37,9 @@ public partial class App : Application
             {
                 services.AddSingleton<AppSettings>(settings); // Use the loaded settings
                 services.AddSingleton<SpotifyService>();
+                services.AddSingleton<DeezerService>();
                 services.AddSingleton<MediaStateManager>();
+                services.AddSingleton<SettingsService>();
                 services.AddSingleton<MainWindow>();
                 services.AddSingleton<SettingsWindow>();
                 services.AddSingleton<AboutWindow>();
@@ -97,9 +98,13 @@ public partial class App : Application
             // settingsWindow.Show();
         }
 
-        // Загружаем настройки
-        await SettingsService.LoadSettingsAsync();
-        SettingsService.RegisterSettingsSaveOnPropertyChange();
+        // Получаем SettingsService из DI
+        var settingsService = AppHost.Services.GetRequiredService<SettingsService>();
+
+        // Загружаем настройки В синглтон AppSettings через SettingsService
+        await settingsService.LoadSettingsAsync();
+        // Этот вызов больше не нужен, так как автосохранение отключено
+        // settingsService.RegisterSettingsSaveOnPropertyChange(); 
 
         try
         {
@@ -109,8 +114,10 @@ public partial class App : Application
             
             if (UpdateManager?.IsInstalled == true) // Проверяем, установлено ли приложение и инициализирован ли менеджер
             {
-                // Проверяем настройку автообновления
-                if (SettingsService.CurrentSettings.AutoCheckForUpdates)
+                // Проверяем настройку автообновления через инъектированный AppSettings
+                // (SettingsService больше не имеет CurrentSettings)
+                var currentSettings = AppHost.Services.GetRequiredService<AppSettings>(); 
+                if (currentSettings.AutoCheckForUpdates)
                 {
                     // Запускаем проверку обновлений
                     await CheckForUpdates();
@@ -154,45 +161,51 @@ public partial class App : Application
             var latestVersion = updateInfo.TargetFullRelease.Version;
             Console.WriteLine($"Доступна новая версия: {latestVersion}");
 
-            // Проверяем, включено ли тихое обновление
-            if (SettingsService.CurrentSettings.SilentAutoUpdates)
+            // Получаем settingsService из DI - Используем GetRequiredService
+            var settingsService = AppHost.Services.GetRequiredService<SettingsService>(); 
+            if (settingsService != null)
             {
-                Console.WriteLine("Тихое обновление включено. Начинаем скачивание в фоне...");
-                try
+                // Проверяем, включено ли тихое обновление
+                var currentSettings = AppHost.Services.GetRequiredService<AppSettings>(); // Получаем настройки
+                if (currentSettings.SilentAutoUpdates)
                 {
-                    // Просто скачиваем, Velopack применит при следующем запуске
-                    await UpdateManager.DownloadUpdatesAsync(updateInfo, p => Console.WriteLine($"Авто-загрузка: {p}%"));
-                    Console.WriteLine("Обновление скачано. Будет применено при следующем запуске.");
-                }
-                catch (Exception downloadEx)
-                {
-                    Console.WriteLine($"Ошибка при фоновом скачивании обновления: {downloadEx.Message}");
-                    // Возможно, стоит показать ошибку пользователю?
-                    // MessageBox.Show($"Не удалось скачать обновление в фоне: {downloadEx.Message}", "Ошибка автообновления", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-            }
-            else // Обычное обновление с запросом
-            {
-                MessageBoxResult result = MessageBox.Show(
-                    $"Доступна новая версия ({latestVersion}). Хотите скачать и установить её сейчас?",
-                    "Доступно обновление",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Information);
-
-                if (result == MessageBoxResult.Yes)
-                {
+                    Console.WriteLine("Тихое обновление включено. Начинаем скачивание в фоне...");
                     try
                     {
-                        Console.WriteLine("Скачивание обновлений...");
-                        await UpdateManager.DownloadUpdatesAsync(updateInfo, p => Console.WriteLine($"Загрузка: {p}%"));
-
-                        Console.WriteLine("Применение обновлений и перезапуск...");
-                        UpdateManager.ApplyUpdatesAndRestart(updateInfo);
+                        // Просто скачиваем, Velopack применит при следующем запуске
+                        await UpdateManager.DownloadUpdatesAsync(updateInfo, p => Console.WriteLine($"Авто-загрузка: {p}%"));
+                        Console.WriteLine("Обновление скачано. Будет применено при следующем запуске.");
                     }
                     catch (Exception downloadEx)
                     {
-                        Console.WriteLine($"Ошибка при скачивании/применении обновления: {downloadEx.Message}");
-                        MessageBox.Show($"Ошибка при скачивании/применении обновления: {downloadEx.Message}", "Ошибка обновления", MessageBoxButton.OK, MessageBoxImage.Error);
+                        Console.WriteLine($"Ошибка при фоновом скачивании обновления: {downloadEx.Message}");
+                        // Возможно, стоит показать ошибку пользователю?
+                        // MessageBox.Show($"Не удалось скачать обновление в фоне: {downloadEx.Message}", "Ошибка автообновления", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
+                }
+                else // Обычное обновление с запросом
+                {
+                    MessageBoxResult result = MessageBox.Show(
+                        $"Доступна новая версия ({latestVersion}). Хотите скачать и установить её сейчас?",
+                        "Доступно обновление",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Information);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        try
+                        {
+                            Console.WriteLine("Скачивание обновлений...");
+                            await UpdateManager.DownloadUpdatesAsync(updateInfo, p => Console.WriteLine($"Загрузка: {p}%"));
+
+                            Console.WriteLine("Применение обновлений и перезапуск...");
+                            UpdateManager.ApplyUpdatesAndRestart(updateInfo);
+                        }
+                        catch (Exception downloadEx)
+                        {
+                            Console.WriteLine($"Ошибка при скачивании/применении обновления: {downloadEx.Message}");
+                            MessageBox.Show($"Ошибка при скачивании/применении обновления: {downloadEx.Message}", "Ошибка обновления", MessageBoxButton.OK, MessageBoxImage.Error);
+                        }
                     }
                 }
             }
@@ -250,9 +263,23 @@ public partial class App : Application
 
     protected override async void OnExit(ExitEventArgs e)
     {
-        await AppHost!.StopAsync();
+        // Явно сохраняем настройки перед выходом
+        if (AppHost != null)
+        {
+            var settingsService = AppHost.Services.GetService<SettingsService>();
+            if (settingsService != null)
+            {
+                DebugLogger.Log("Application exiting. Explicitly saving settings...");
+                await settingsService.SaveSettingsAsync();
+                DebugLogger.Log("Settings saved explicitly on exit.");
+            }
+            
+            await AppHost.StopAsync();
+        }
+        
         _mutex?.ReleaseMutex();
         _mutex?.Dispose();
+
         base.OnExit(e);
     }
 

@@ -15,14 +15,16 @@ namespace CustomMediaRPC.Views
 {
     public partial class SettingsWindow : FluentWindow
     {
-        private AppSettings _appSettings; // Храним ссылку на настройки
+        private readonly AppSettings _appSettings; // Храним ссылку на настройки
+        private readonly SettingsService _settingsService; // Добавляем поле для SettingsService
         private bool _isInitializing = true; // Flag to prevent premature event firing
 
-        // Принимаем AppSettings в конструкторе
-        public SettingsWindow(AppSettings settings)
+        // Принимаем AppSettings и SettingsService в конструкторе
+        public SettingsWindow(AppSettings settings, SettingsService settingsService)
         {
             InitializeComponent();
             _appSettings = settings; // Сохраняем ссылку
+            _settingsService = settingsService; // Сохраняем ссылку
             DataContext = _appSettings; // Set DataContext for Binding
             PopulateLanguageComboBox();
             LoadSettings();
@@ -64,7 +66,7 @@ namespace CustomMediaRPC.Views
             // We only need to ensure the language is saved if it changed
             // AppSettingsService?.SaveSettings(_appSettings); // Assuming a service to save settings
             // Or directly save if no service:
-            _ = App.SettingsService.SaveSettingsAsync(); // Correct asynchronous call (discard result if not needed)
+            _ = _settingsService.SaveSettingsAsync(); // Используем инъектированный сервис
         }
 
         // Обработчики событий Changed для чекбоксов
@@ -131,7 +133,7 @@ namespace CustomMediaRPC.Views
         protected override async void OnClosed(EventArgs e)
         {
             //SaveSettings(); // Incorrect synchronous call
-            await App.SettingsService.SaveSettingsAsync(); // Ensure settings are saved when window is closed
+            await _settingsService.SaveSettingsAsync(); // Используем инъектированный сервис
             base.OnClosed(e);
         }
 

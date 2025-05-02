@@ -68,7 +68,8 @@ public class BooleanToVisibilityConverter : IValueConverter
 public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 {
     private AppConfig? _config; // Сделали nullable
-    private AppSettings _appSettings; // Добавлено
+    private readonly AppSettings _appSettings; // Добавлено
+    private readonly SettingsService _settingsService; // Добавляем поле для SettingsService
     private DiscordRpcClient? _client;
     private HttpClient? _sharedHttpClient;
     private SpotifyService? _spotifyService;
@@ -102,10 +103,11 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
     public AppSettings CurrentAppSettings => _appSettings; // Добавляем публичное свойство
 
-    public MainWindow(AppSettings settings) // Изменен конструктор
+    public MainWindow(AppSettings settings, SettingsService settingsService)
     {
         InitializeComponent();
         _appSettings = settings; // Сохраняем настройки
+        _settingsService = settingsService; // Сохраняем сервис настроек
         
         // Устанавливаем DataContext на сам объект MainWindow
         this.DataContext = this; 
@@ -1144,11 +1146,16 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         {
             if (_selectedLinkSites.Count < MaxLinkSites)
             {
-                // Добавляем ВНУТРЕННИЙ ключ
-                if (!_selectedLinkSites.Contains(siteInternalKey))
+                // Добавляем ВНУТРЕННИЙ ключ в существующий список
+                if (!_appSettings.SelectedLinkButtonSites.Contains(siteInternalKey)) // Проверяем основной список
                 {
-                    _selectedLinkSites.Add(siteInternalKey);
+                    _appSettings.SelectedLinkButtonSites.Add(siteInternalKey); 
                 }
+                 // Обновляем и локальную копию
+                 if (!_selectedLinkSites.Contains(siteInternalKey))
+                 {
+                     _selectedLinkSites.Add(siteInternalKey);
+                 }
             }
             else // Уже выбрано максимальное количество
             {
@@ -1159,14 +1166,16 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         }
         else // Checkbox был снят
         {
-            // Удаляем ВНУТРЕННИЙ ключ
-            _selectedLinkSites.Remove(siteInternalKey);
+            // Удаляем ВНУТРЕННИЙ ключ из существующего списка
+            _appSettings.SelectedLinkButtonSites.Remove(siteInternalKey);
+            // Обновляем и локальную копию (для консистентности, хотя она теперь менее важна)
+             _selectedLinkSites.Remove(siteInternalKey);
         }
         
-        // --- Сохраняем измененный список ВНУТРЕННИХ ключей в настройки --- 
-        _appSettings.SelectedLinkButtonSites = new List<string>(_selectedLinkSites); 
-        DebugLogger.Log($"[LinkCheckBox_Changed] Saved internal site keys to AppSettings: [{string.Join(", ", _appSettings.SelectedLinkButtonSites)}]");
-        // ------------------------------------------------------------------
+        // --- Сохранение в настройки БОЛЬШЕ НЕ НУЖНО ЗДЕСЬ, будет сохранено при выходе --- 
+        // _appSettings.SelectedLinkButtonSites = new List<string>(_selectedLinkSites); 
+        DebugLogger.Log($"[LinkCheckBox_Changed] Current internal site keys in AppSettings: [{string.Join(", ", _appSettings.SelectedLinkButtonSites)}]");
+        // ---------------------------------------------------------------------------------
 
         UpdateLinkCheckBoxStates();
         
@@ -1210,8 +1219,8 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
     private void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        // Передаем _appSettings в окно настроек
-        var settingsWindow = new SettingsWindow(_appSettings) 
+        // Передаем _appSettings и _settingsService в окно настроек
+        var settingsWindow = new SettingsWindow(_appSettings, _settingsService) 
         {
             Owner = this // Устанавливаем владельца, чтобы окно настроек было модальным по отношению к главному
         };

@@ -584,9 +584,13 @@ public class MediaStateManager
         string query;
         try {
              query = Uri.EscapeDataString($"{artist!} {title!}"); 
-             DebugLogger.Log($"[URL {stopwatch.ElapsedMilliseconds}ms] Generated query for '{serviceName}': '{query}'");
+             // Сохраним время перед логированием
+             long elapsedMs = stopwatch.ElapsedMilliseconds;
+             DebugLogger.Log($"[URL {elapsedMs}ms] Generated query for '{serviceName}': '{query}'");
         } catch (UriFormatException ex) {
-             DebugLogger.Log($"[URL {stopwatch.ElapsedMilliseconds}ms] Error escaping query for '{serviceName}' ('{artist} {title}')", ex);
+             // Сохраним время перед логированием
+             long elapsedMs = stopwatch.ElapsedMilliseconds;
+             DebugLogger.Log($"[URL {elapsedMs}ms] Error escaping query for '{serviceName}' ('{artist} {title}')", ex);
              return null;
         }
 
