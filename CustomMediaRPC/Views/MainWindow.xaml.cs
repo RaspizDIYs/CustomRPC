@@ -1225,22 +1225,33 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         {
             string clientId = Encoding.UTF8.GetString(Convert.FromBase64String(EncodedClientId));
             Clipboard.SetText(clientId);
-            // Можно добавить уведомление об успешном копировании, если нужно
-            // Например, изменить ToolTip кнопки на время
+            
+            // Эффект успеха
+            var originalContent = CopyDebugInfoButton.Content;
+            var originalToolTip = CopyDebugInfoButton.ToolTip;
+            CopyDebugInfoButton.Content = "✓";
             CopyDebugInfoButton.ToolTip = "Скопировано!";
+            
             Task.Delay(1500).ContinueWith(_ => Dispatcher.Invoke(() => 
             {
-                CopyDebugInfoButton.ToolTip = "Скопировать отладочную информацию";
+                CopyDebugInfoButton.Content = originalContent; // Восстанавливаем исходный текст
+                CopyDebugInfoButton.ToolTip = originalToolTip; // Восстанавливаем исходную подсказку
             }));
         }
         catch (Exception ex)
         {
             DebugLogger.Log("Error copying debug info to clipboard", ex);
-            // Уведомление об ошибке
+            
+            // Эффект ошибки
+            var originalContent = CopyDebugInfoButton.Content;
+            var originalToolTip = CopyDebugInfoButton.ToolTip;
+            CopyDebugInfoButton.Content = "X";
             CopyDebugInfoButton.ToolTip = "Ошибка копирования";
-             Task.Delay(1500).ContinueWith(_ => Dispatcher.Invoke(() => 
+             
+            Task.Delay(1500).ContinueWith(_ => Dispatcher.Invoke(() => 
             {
-                CopyDebugInfoButton.ToolTip = "Скопировать отладочную информацию";
+                CopyDebugInfoButton.Content = originalContent; // Восстанавливаем исходный текст
+                CopyDebugInfoButton.ToolTip = originalToolTip; // Восстанавливаем исходную подсказку
             }));
         }
     }
