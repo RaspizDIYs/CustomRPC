@@ -26,16 +26,32 @@ public partial class App : Application
     private Mutex? _mutex;
     private const string MutexName = "Global\\CustomMediaRPC";
 
+    [STAThread]
+    public static void Main(string[] args)
+    {
+        try
+        {
+            VelopackApp.Build().Run();
+
+            var app = new App();
+            app.InitializeComponent();
+            app.Run();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Критическая ошибка при запуске приложения: {ex.Message}", "Ошибка Запуска", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     public App()
     {
-        // Initialize LocalizationManager first
-        var settings = LoadSettings(); // Need to load settings to get the language
+        var settings = LoadSettings();
         LocalizationManager.Initialize(settings.Language);
 
         AppHost = Host.CreateDefaultBuilder()
             .ConfigureServices((hostContext, services) =>
             {
-                services.AddSingleton<AppSettings>(settings); // Use the loaded settings
+                services.AddSingleton<AppSettings>(settings);
                 services.AddSingleton<SpotifyService>();
                 services.AddSingleton<DeezerService>();
                 services.AddSingleton<MediaStateManager>();
@@ -48,16 +64,7 @@ public partial class App : Application
             })
             .Build();
 
-        try
-        {
-            VelopackApp.Build().Run();
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Критическая ошибка инициализации Velopack: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-            // Возможно, стоит завершить приложение?
-            // Shutdown();
-        }
+        DispatcherUnhandledException += Application_DispatcherUnhandledException;
     }
 
     protected override async void OnStartup(StartupEventArgs e)
@@ -73,7 +80,13 @@ public partial class App : Application
 
         base.OnStartup(e);
 
-        await AppHost!.StartAsync();
+        if (AppHost == null) 
+        {
+             MessageBox.Show("Critical error: AppHost is null before starting.", "Startup Error", MessageBoxButton.OK, MessageBoxImage.Error);
+             Shutdown();
+             return;
+        }
+        await AppHost.StartAsync();
 
         var startupWindow = AppHost.Services.GetRequiredService<MainWindow>();
         var settings = AppHost.Services.GetRequiredService<AppSettings>();
@@ -81,45 +94,36 @@ public partial class App : Application
         if (settings.StartMinimized)
         {
             startupWindow.WindowState = WindowState.Minimized;
-            startupWindow.Hide(); // Hide the main window if starting minimized
+            startupWindow.Hide();
         }
         else
         {
             startupWindow.Show();
         }
 
-        // Check for first launch after initializing services
         if (settings.FirstLaunch)
         {
             var aboutWindow = AppHost.Services.GetRequiredService<AboutWindow>();
             aboutWindow.Show();
-            // Optionally show settings too or guide user
-            // var settingsWindow = AppHost.Services.GetRequiredService<SettingsWindow>();
-            // settingsWindow.Show();
         }
 
-        // Получаем SettingsService из DI
         var settingsService = AppHost.Services.GetRequiredService<SettingsService>();
 
-        // Загружаем настройки В синглтон AppSettings через SettingsService
         await settingsService.LoadSettingsAsync();
-        // Этот вызов больше не нужен, так как автосохранение отключено
-        // settingsService.RegisterSettingsSaveOnPropertyChange(); 
 
         try
         {
-            // Инициализируем UpdateManager ТОЛЬКО при обычном запуске
-            // (т.к. VelopackApp.Run() уже обработал служебные запуски в Main)
             UpdateManager = new UpdateManager(new GithubSource("https://github.com/RaspizDIYs/CustomRPC", null, false));
             
-            if (UpdateManager?.IsInstalled == true) // Проверяем, установлено ли приложение и инициализирован ли менеджер
+            if (UpdateManager?.IsInstalled == true)
             {
-                // Проверяем настройку автообновления через инъектированный AppSettings
-                // (SettingsService больше не имеет CurrentSettings)
                 var currentSettings = AppHost.Services.GetRequiredService<AppSettings>(); 
-                if (currentSettings.AutoCheckForUpdates)
+                if (currentSettings == null)
                 {
-                    // Запускаем проверку обновлений
+                     Console.WriteLine("Ошибка: currentSettings is null after GetRequiredService<AppSettings>().");
+                }
+                else if (currentSettings.AutoCheckForUpdates)
+                {
                     await CheckForUpdates();
                 }
                 else
@@ -161,29 +165,24 @@ public partial class App : Application
             var latestVersion = updateInfo.TargetFullRelease.Version;
             Console.WriteLine($"Доступна новая версия: {latestVersion}");
 
-            // Получаем settingsService из DI - Используем GetRequiredService
             var settingsService = AppHost.Services.GetRequiredService<SettingsService>(); 
             if (settingsService != null)
             {
-                // Проверяем, включено ли тихое обновление
-                var currentSettings = AppHost.Services.GetRequiredService<AppSettings>(); // Получаем настройки
+                var currentSettings = AppHost.Services.GetRequiredService<AppSettings>();
                 if (currentSettings.SilentAutoUpdates)
                 {
                     Console.WriteLine("Тихое обновление включено. Начинаем скачивание в фоне...");
                     try
                     {
-                        // Просто скачиваем, Velopack применит при следующем запуске
                         await UpdateManager.DownloadUpdatesAsync(updateInfo, p => Console.WriteLine($"Авто-загрузка: {p}%"));
                         Console.WriteLine("Обновление скачано. Будет применено при следующем запуске.");
                     }
                     catch (Exception downloadEx)
                     {
                         Console.WriteLine($"Ошибка при фоновом скачивании обновления: {downloadEx.Message}");
-                        // Возможно, стоит показать ошибку пользователю?
-                        // MessageBox.Show($"Не удалось скачать обновление в фоне: {downloadEx.Message}", "Ошибка автообновления", MessageBoxButton.OK, MessageBoxImage.Warning);
                     }
                 }
-                else // Обычное обновление с запросом
+                else
                 {
                     MessageBoxResult result = MessageBox.Show(
                         $"Доступна новая версия ({latestVersion}). Хотите скачать и установить её сейчас?",
@@ -230,22 +229,19 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            // Handle error (e.g., log it, show a message)
             MessageBox.Show($"Error loading settings: {ex.Message}\nUsing default settings.", "Settings Error", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
 
         if (settings == null)
         {
             settings = new AppSettings();
-            firstLaunch = true; // Mark as first launch if settings didn't exist or failed to load
-            // Save initial default settings
+            firstLaunch = true;
             SaveSettingsStatic(settings);
         }
         settings.FirstLaunch = firstLaunch;
         return settings;
     }
 
-    // Static version for saving before DI container is built
     private static void SaveSettingsStatic(AppSettings settings)
     {
          try
@@ -263,7 +259,6 @@ public partial class App : Application
 
     protected override async void OnExit(ExitEventArgs e)
     {
-        // Явно сохраняем настройки перед выходом
         if (AppHost != null)
         {
             var settingsService = AppHost.Services.GetService<SettingsService>();
@@ -283,19 +278,11 @@ public partial class App : Application
         base.OnExit(e);
     }
 
-    // Handle unhandled exceptions
     private void Application_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        // Log the exception details
-        // Logger.LogError(e.Exception, "An unhandled exception occurred");
-
         MessageBox.Show($"An unexpected error occurred: {e.Exception.Message}\n\n{e.Exception.StackTrace}",
                         "Unhandled Exception", MessageBoxButton.OK, MessageBoxImage.Error);
 
-        // Prevent default WPF crash behavior
         e.Handled = true;
-
-        // Optionally, try to gracefully shut down
-        // Shutdown();
     }
 }
