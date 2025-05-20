@@ -133,40 +133,32 @@ public class MediaStateManager
 
             // Сравниваем новое состояние с текущим
             var now = DateTime.UtcNow;
-            if (!AreStatesEqual(_currentState, newState))
+            
+            // AreStatesEqual сравнивает только Title, Artist, Album, Status, SourceAppId
+            bool majorContentChanged = !AreStatesEqual(_currentState, newState);
+
+            // Всегда обновляем _currentState последними данными из SMTC
+            // Это важно для корректного отображения времени и обложки, даже если "основной" трек не сменился
+            _currentState = newState;
+
+            if (majorContentChanged)
             {
-                Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] State changed! Previous: {_currentState}, New: {newState}. Time since last change: {(now - _lastStateChangeTime).TotalMilliseconds}ms");
-                _currentState = newState;
-                _lastSentPresence = null;
+                Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Major content changed! Previous state for AreStatesEqual: {{Title='{_currentState.Title}', Artist='{_currentState.Artist}', Album='{_currentState.Album}', Status='{_currentState.Status}'}}, New state: {{Title='{newState.Title}', Artist='{newState.Artist}', Album='{newState.Album}', Status='{newState.Status}'}}. Time since last change: {(now - _lastStateChangeTime).TotalMilliseconds}ms");
+                // Сбрасываем _lastSentPresence только если изменился основной контент (трек, альбом, исполнитель, статус).
+                // Это позволит AreRichPresenceEqual в ShouldUpdatePresence корректно сравнить новый presence 
+                // с предыдущим для того же трека (но, возможно, с обновленным Timestamp).
+                _lastSentPresence = null; 
                 _lastStateChangeTime = now;
-                
-                // --- Управление временем начала трека ---
-                // if (_currentState.Status == MediaPlaybackStatus.Playing)
-                // {
-                //     _currentTrackStartTime = now; // Запоминаем время начала
-                //     Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Track started playing. StartTime set to {_currentTrackStartTime}");
-                // }
-                // else
-                // {
-                //     _currentTrackStartTime = null; // Сбрасываем время, если не играет
-                //     Debug.WriteLine("[BUILD {stopwatch.ElapsedMilliseconds}ms] Track is not playing. StartTime reset.");
-                // }
-                // ----------------------------------------
             }
             else
             {
-                Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] State hasn't changed. Current: {_currentState}. Time since last change: {(now - _lastStateChangeTime).TotalMilliseconds}ms");
-                // Если состояние не изменилось, нет смысла пересоздавать presence,
-                // но мы должны вернуть _lastSentPresence, если он есть, чтобы ShouldUpdatePresence мог работать корректно
-                 // Если _lastSentPresence не null, значит мы уже успешно отправляли это состояние
-                // Если null, значит состояние хоть и не изменилось, но мы его еще не отправляли (например, после сброса)
-                // В этом случае нужно все равно построить presence
-                if (_lastSentPresence != null) {
-                     Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Returning cached presence as state hasn't changed.");
-                     return _lastSentPresence;
-                }
-                 Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] State unchanged but no cached presence, proceeding to build.");
-
+                Debug.WriteLine($"[BUILD {stopwatch.ElapsedMilliseconds}ms] Major content hasn't changed. Current state (now updated): {_currentState}. Time since last change: {(now - _lastStateChangeTime).TotalMilliseconds}ms");
+                // Если основной контент не изменился, _lastSentPresence НЕ сбрасываем.
+                // Это позволяет AreRichPresenceEqual отфильтровать отправку, если даже Timestamp не сильно изменился.
+                // Однако, если _lastSentPresence был null (например, сразу после запуска или смены источника), 
+                // то мы всё равно должны построить presence.
+                // AreRichPresenceEqual в ShouldUpdatePresence позаботится о том, чтобы не отправлять лишнего.
+                // Убрана проверка `if (_lastSentPresence != null) return _lastSentPresence;`
             }
 
             // Строим RichPresence на основе *актуального* _currentState
